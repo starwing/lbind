@@ -1,0 +1,8 @@
+build
+bench.c
+test.lua
+tags*
+*/tags*
+*.exe
+*.dll
+*~
