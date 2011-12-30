@@ -2,14 +2,6 @@
 #include "lbind.h"
 
 
-#define lbind_ptrbox  "lbind-pointer-box"
-#define lbind_typebox "lbind-typeinfo-box"
-#define lbind_libmeta "lbind-lib-metatable"
-
-
-luaL_Reg lbC_nomt[1] = {{NULL, NULL}};
-
-
 #if LUA_VERSION_NUM < 502
 void lua_rawgetp(lua_State *L, int narg, const void *p)
 {
@@ -26,17 +18,11 @@ void lua_rawsetp(lua_State *L, int narg, const void *p)
 #endif
 
 
-typedef struct {
-    void *instance;
-    int flags;
-} lbC_Object;
-
-#define LBC_GC          0x01
-#define LBC_HASSETTER   0x02
-#define LBC_HASGETTER   0x04
-
-
 /* lbind global informations */
+
+#define lbind_ptrbox  "lbind-pointer-box"
+#define lbind_typebox "lbind-typeinfo-box"
+#define lbind_libmeta "lbind-lib-metatable"
 
 static void rawget_staticptr(lua_State *L, const char *staticptr, const void **pcache)
 {
@@ -126,7 +112,7 @@ int lbind_getinfo(lua_State *L)
     X(4, "types_key",    lua_getfield(L, LUA_REGISTRYINDEX, lbind_typebox)) \
     X(5, "libmeta",      get_libmetatable(L)) \
     X(6, "libmeta_key",  lua_getfield(L, LUA_REGISTRYINDEX, lbind_libmeta)) \
-
+     
     static const char *options[] = {
         "all",
 #define X(a,b,c) b,
@@ -146,14 +132,24 @@ int lbind_getinfo(lua_State *L)
     if (option == 0) {
         int i;
         for (i = TOTAL_OPTIONS; i >= 1; --i)
-            lua_setfield(L, -i-1, options[i]);
+            lua_setfield(L, -i - 1, options[i]);
     }
     return 1;
 #undef TOTAL_OPTIONS
 #undef INFOS
 }
 
+
 /* lbind userdata maintain */
+
+typedef struct {
+    void *instance;
+    int flags;
+} lbC_Object;
+
+#define LBC_GC          0x01
+#define LBC_HASSETTER   0x02
+#define LBC_HASGETTER   0x04
 
 void lbind_getmetatable(lua_State *L, const lbC_Type *t)
 {
@@ -221,7 +217,8 @@ void *lbind_toudata(lua_State *L, int ud)
     return obj == NULL ? NULL : obj->instance;
 }
 
-static int testudata(lua_State *L, int ud, const lbC_Type *t) {
+static int testudata(lua_State *L, int ud, const lbC_Type *t)
+{
     if (lua_getmetatable(L, ud)) {  /* does it have a metatable? */
         lbind_getmetatable(L, t); /* get correct metatable */
         if (!lua_rawequal(L, -1, -2))  /* not the same? */
@@ -270,7 +267,7 @@ void *lbind_eraseudata(lua_State *L, int ud)
 }
 
 
-/* lbind class maintain */
+/* lbind memory maintain */
 
 void lbG_register(lua_State *L, int narg)
 {
@@ -292,6 +289,9 @@ int lbG_shouldgc(lua_State *L, int narg)
     return obj != NULL && (obj->flags & LBC_GC) != 0;
 }
 
+
+/* lbind type system */
+
 const char *lbC_type(lua_State *L, int narg)
 {
     lbC_Object *obj = to_object(L, narg);
@@ -305,11 +305,6 @@ const char *lbC_type(lua_State *L, int narg)
             return ti->tname;
     }
     return NULL;
-}
-
-int lbC_inherit(lua_State *L, lbC_Type *t, const lbC_Type *pt)
-{
-    return 0;
 }
 
 int lbC_isa(lua_State *L, int narg, const lbC_Type *t)
@@ -364,6 +359,11 @@ void *lbC_checkself(lua_State *L, int ud, const lbC_Type *t)
         lbE_typeerror(L, ud, t->tname);
     return u;
 }
+
+
+/* lbind class maintain */
+
+luaL_Reg lbC_nomt[1] = {{NULL, NULL}};
 
 void lbC_inittype(lua_State *L, const char *tname, lbC_Type **bases, lbC_Type *t)
 {
@@ -556,10 +556,8 @@ void lbC_setmt(lua_State *L, luaL_Reg *funcs, luaL_Reg *mts, lbC_Type *t)
     lua_setfield(L, -2, "__newindex"); /* 3->2 */
     lua_pushcfunction(L, lbM_tostring); /* 3->3 */
     lua_setfield(L, -2, "__tostring"); /* 3->2 */
-    if (mts != NULL) {
-        lua_pushvalue(L, -2); /* 3 */
-        luaL_setfuncs(L, mts, 1); /* 3->2 */
-    }
+    if (mts != NULL && mts != lbC_nomt)
+        luaL_setfuncs(L, mts, 0);
     lua_pushcfunction(L, lbM_gc); /* 3->3 */
     lua_setfield(L, -2, "__gc"); /* 3->2 */
 

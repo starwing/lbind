@@ -220,7 +220,7 @@ static luaL_Reg lbind_funcs[] = {
     { "contains",   lbR_contains   },
     { "delete",     lbR_delete     },
     { "flags",      lbR_flags      },
-    { "getinfo",    lbind_getinfo  },
+    { "info",       lbind_getinfo  },
     { "isa",        lbR_isa        },
     { "methods",    lbR_methods    },
     { "owner",      lbR_owner      },
