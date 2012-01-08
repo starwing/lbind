@@ -33,8 +33,15 @@ LBLIB_API int luaopen_lbind (lua_State *L);
 
 /* lbind error process */
 
-LBLIB_API int lbE_typeerror  (lua_State *L, int narg, const char *tname);
-LBLIB_API int lbE_matcherror (lua_State *L, const char *extramsg);
+LBLIB_API int lbind_typeerror  (lua_State *L, int narg, const char *tname);
+LBLIB_API int lbind_matcherror (lua_State *L, const char *extramsg);
+
+/* lbind global informations */
+LBLIB_API void lbind_getpointertable (lua_State *L);
+LBLIB_API void lbind_gettypemaptable (lua_State *L);
+LBLIB_API void lbind_getlibmaptable  (lua_State *L);
+LBLIB_API void lbind_getlibmeta      (lua_State *L);
+LBLIB_API void lbind_getenummeta     (lua_State *L);
 
 /* lbind class runtime */
 
@@ -83,10 +90,6 @@ LBLIB_API void *lbind_eraseudata (lua_State *L, int ud);
 
 LBLIB_API void lbind_getmetatable (lua_State *L, const lbC_Type *t);
 
-/* lbind global informations */
-LBLIB_API void lbind_getpointertable  (lua_State *L);
-LBLIB_API void lbind_gettypeinfotable (lua_State *L);
-
 /* lbind pointer registry */
 LBLIB_API void lbG_register   (lua_State *L, int ud);
 LBLIB_API void lbG_unregister (lua_State *L, int ud);
@@ -119,12 +122,15 @@ typedef struct {
 
 typedef struct {
     const char *name;
+    lbE_Enum *enums;
 } lbE_EnumType;
 
-LBLIB_API int lbE_initenum  (lua_State *L, const char *name, lbE_Enum *enums, lbE_EnumType *et);
-LBLIB_API int lbE_isenum   (lua_State *L, int narg, lbE_EnumType *et);
-LBLIB_API int lbE_pushenum (lua_State *L, int evalue, lbE_EnumType *et);
-LBLIB_API int lbE_toenum   (lua_State *L, int narg, lbE_EnumType *et);
+LBLIB_API void lbE_initenum (lua_State *L, const char *name, lbE_Enum *enums, lbE_EnumType *et);
+
+LBLIB_API int  lbE_isenum    (lua_State *L, int narg, lbE_EnumType *et);
+LBLIB_API void lbE_pushenum  (lua_State *L, int evalue, lbE_EnumType *et);
+LBLIB_API int  lbE_toenum    (lua_State *L, int narg, lbE_EnumType *et);
+LBLIB_API int  lbE_checkenum (lua_State *L, int narg, lbE_EnumType *et);
 
 #define lbC_newenum(L,name,enums,et) \
     ( luaL_newlibtable((L), (enums)), \
@@ -132,7 +138,7 @@ LBLIB_API int lbE_toenum   (lua_State *L, int narg, lbE_EnumType *et);
 
 /* lbind template runtime */
 
-LBLIB_API int lbT_register (lua_State *L, luaL_Reg *temps, const char *tname);
+LBLIB_API int lbT_newtemplate (lua_State *L, luaL_Reg *temps, const char *tname);
 
 
 #endif /* LBIND_H */

@@ -4,7 +4,7 @@
 
 /* lbind error maintain */
 
-int lbE_typeerror(lua_State *L, int narg, const char *tname)
+int lbind_typeerror(lua_State *L, int narg, const char *tname)
 {
     const char *real_type = lbC_type(L, narg);
     const char *msg;
@@ -15,7 +15,7 @@ int lbE_typeerror(lua_State *L, int narg, const char *tname)
     return luaL_argerror(L, narg, msg);
 }
 
-int lbE_matcherror(lua_State *L, const char *extramsg)
+int lbind_matcherror(lua_State *L, const char *extramsg)
 {
     lua_Debug ar;
     lua_getinfo(L, "n", &ar);
@@ -74,32 +74,53 @@ static int lbR_delete(lua_State *L)
     return 0;
 }
 
-static int lbR_isa(lua_State *L)
+static int is_type(lua_State *L, const void *t, int ch)
+{
+    int istype = 0;
+    lua_rawgetp(L, LUA_REGISTRYINDEX, t);
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        return 0;
+    }
+    lua_rawgetp(L, -1, t);
+    istype = lua_isnil(L, -1) || *lua_tostring(L, -1) != ch;
+    lua_pop(L, 1);
+    return istype; /* remain table on top */
+}
+
+static void get_typeptr(lua_State *L)
 {
     if (!lua_islightuserdata(L, -1)) {
-        lbind_gettypeinfotable(L); /* 1 */
+        if (lua_isstring(L, -2))
+            lbind_gettypemaptable(L); /* 1 */
+        else
+            lbind_getlibmaptable(L); /* 1 */
         lua_pushvalue(L, -2); /* 2 */
         lua_rawget(L, -2); /* 2->2 */
+        lua_remove(L, -2); /* (1) */
     }
+}
+
+static int lbR_isa(lua_State *L)
+{
+    get_typeptr(L);
     if (lua_islightuserdata(L, -1)) {
         const lbC_Type *t = (const lbC_Type*)lua_touserdata(L, -1);
-        lua_pushboolean(L, lbC_isa(L, -3, t));
-        return 1;
+        if (is_type(L, t, 'c')) {
+            lua_pushboolean(L, lbC_isa(L, -3, t));
+            return 1;
+        }
     }
     return 0;
 }
 
 static int lbR_cast(lua_State *L)
 {
-    if (!lua_islightuserdata(L, -1)) {
-        lbind_gettypeinfotable(L); /* 1 */
-        lua_pushvalue(L, -2); /* 2 */
-        lua_rawget(L, -2); /* 2->2 */
-    }
+    get_typeptr(L);
     if (lua_islightuserdata(L, -1)) {
         const lbC_Type *t = (const lbC_Type*)lua_touserdata(L, -1);
-        void *u = lbC_cast(L, -3, t);
-        if (u != NULL) {
+        void *u;
+        if (is_type(L, t, 'c') && (u = lbC_cast(L, -3, t)) != NULL) {
             lbind_pushudata(L, u, t);
             return 1;
         }
@@ -107,53 +128,59 @@ static int lbR_cast(lua_State *L)
     return 0;
 }
 
+static int get_libmeta(lua_State *L)
+{
+    lbind_getlibmaptable(L); /* 1 */
+    lua_pushvalue(L, -2); /* 2 */
+    lua_rawget(L, -2); /* 2->2 */
+    lua_remove(L, -2); /* (1) */
+    if (lua_islightuserdata(L, -1))
+        return 1;
+    lua_pop(L, 1); /* (1) */
+    return 0;
+}
+
 static int lbR_type(lua_State *L)
 {
     const char *type = NULL;
-    if (lua_islightuserdata(L, -1)) {
-        lua_pushvalue(L, 1);
-        lua_rawget(L, LUA_REGISTRYINDEX);
-        if (lua_isnil(L, -1))
-            lbE_typeerror(L, -1, "lbind type");
-        lua_pop(L, 1);
-        type = ((lbC_Type*)lua_touserdata(L, -1))->tname;
-    }
-    else
+    if (lua_isuserdata(L, -1))
         type = lbC_type(L, -1);
-    if (type == NULL)
-        type = lua_typename(L, -1);
-    lua_pushstring(L, type);
+    else if (lua_islightuserdata(L, -1)
+             || (lua_istable(L, -1) && get_libmeta(L))) {
+        const char *tag;
+        lbC_Type *t;
+        t = (lbC_Type*)lua_touserdata(L, -1);
+        lua_rawgetp(L, LUA_REGISTRYINDEX, t);
+        lua_rawgetp(L, -1, t);
+        tag = lua_tostring(L, -1);
+        lua_pop(L, 2);
+        if (tag != NULL && (*tag == 'c' || *tag == 'e'))
+            type = t->tname;
+    }
+    lua_pushstring(L, type != NULL ? type : lua_typename(L, -1));
     return 1;
+}
+
+static int get_classmt(lua_State *L)
+{
+    return ((lua_islightuserdata(L, -1)
+             && is_type(L, lua_touserdata(L, -1), 'c'))
+            || (lua_istable(L, -1) && get_libmeta(L))
+            || (lua_getmetatable(L, -1)));
 }
 
 static int lbR_methods(lua_State *L)
 {
-    const char *type = "lbind object";
-    if (lua_islightuserdata(L, -1)) {
-        lua_rawget(L, LUA_REGISTRYINDEX);
-        type = "lbind type";
-    }
-    else
-        lua_getmetatable(L, -1);
-    if (lua_isnil(L, -1))
-        return lbE_typeerror(L, -1, type);
+    if (!get_classmt(L)) return 0;
     lbM_getfield(L, lbM_libtable);
     return 1;
 }
 
 static int lbR_bases(lua_State *L)
 {
-    const char *type = "lbind object";
     lbC_Type *t;
     int incomplete = 0;
-    if (lua_islightuserdata(L, -1)) {
-        lua_rawget(L, LUA_REGISTRYINDEX);
-        type = "lbind type";
-    }
-    else
-        lua_getmetatable(L, -1); /* 1 */
-    if (lua_isnil(L, -1))
-        return lbE_typeerror(L, -1, type);
+    if (!get_classmt(L)) return 0;
     lbM_getfield(L, lbM_basetable); /* 2 */
     if (!lua_isnil(L, -1)) {
         lua_pushliteral(L, "incomplete"); /* 3 */
@@ -204,22 +231,40 @@ static int lbR_bases(lua_State *L)
     return 0;
 }
 
-static int lbR_flags(lua_State *L)
+static int lbR_enum(lua_State *L)
 {
-    return 0;
-}
-
-static int lbR_contains(lua_State *L)
-{
+    get_typeptr(L);
+    if (lua_islightuserdata(L, -1)) {
+        int value, first = 1;
+        luaL_Buffer b;
+        lbE_Enum *ei;
+        lbE_EnumType *et = (lbE_EnumType*)lua_touserdata(L, -1);
+        if (!is_type(L, et, 'e'))
+            return 0;
+        lua_pop(L, 1); /* pop enum table from is_type */
+        value = lbE_checkenum(L, -2, et);
+        luaL_buffinit(L, &b);
+        for (ei = et->enums; ei->name != NULL; ++ei) {
+            if ((ei->value & value) == value) {
+                if (first)
+                    first = 0;
+                else
+                    luaL_addstring(&b, ", ");
+                luaL_addstring(&b, ei->name);
+                value &= ~ei->value;
+            }
+        }
+        luaL_pushresult(&b);
+        return 1;
+    }
     return 0;
 }
 
 static luaL_Reg lbind_funcs[] = {
     { "bases",      lbR_bases      },
     { "cast",       lbR_cast       },
-    { "contains",   lbR_contains   },
     { "delete",     lbR_delete     },
-    { "flags",      lbR_flags      },
+    { "enum",       lbR_enum       },
     { "info",       lbind_getinfo  },
     { "isa",        lbR_isa        },
     { "methods",    lbR_methods    },
@@ -243,6 +288,6 @@ int luaopen_lbind(lua_State *L)
 
 /*
  * cc: lua='lua52' flags+='-s -O2 -Wall -pedantic -mdll -Id:/$lua/include' libs+='d:/$lua/$lua.dll'
- * cc: flags+='-DLUA_BUILD_AS_DLL' input='lbind.c lb_class.c' output='lbind.dll'
+ * cc: flags+='-DLUA_BUILD_AS_DLL' input='lb*.c' output='lbind.dll'
  * cc: run='$lua tt.lua'
  */
