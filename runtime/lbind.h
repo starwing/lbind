@@ -28,8 +28,8 @@ LBLIB_API void lua_rawsetp (lua_State *L, int narg, const void *p);
 
 /* lbind runtime */
 
-LBLIB_API int lbind_getinfo (lua_State *L);
-LBLIB_API int luaopen_lbind (lua_State *L);
+LUALIB_API int lbind_getinfo (lua_State *L);
+LUALIB_API int luaopen_lbind (lua_State *L);
 
 /* lbind error process */
 
@@ -37,11 +37,18 @@ LBLIB_API int lbind_typeerror  (lua_State *L, int narg, const char *tname);
 LBLIB_API int lbind_matcherror (lua_State *L, const char *extramsg);
 
 /* lbind global informations */
+
 LBLIB_API void lbind_getpointertable (lua_State *L);
 LBLIB_API void lbind_gettypemaptable (lua_State *L);
 LBLIB_API void lbind_getlibmaptable  (lua_State *L);
 LBLIB_API void lbind_getlibmeta      (lua_State *L);
 LBLIB_API void lbind_getenummeta     (lua_State *L);
+
+/* lbind pointer registry */
+
+LBLIB_API void lbG_register   (lua_State *L, int ud);
+LBLIB_API void lbG_unregister (lua_State *L, int ud);
+LBLIB_API int  lbG_shouldgc   (lua_State *L, int ud);
 
 /* lbind class runtime */
 
@@ -70,6 +77,8 @@ LBLIB_API void lbC_setmt       (lua_State *L, luaL_Reg *funcs, luaL_Reg *mts, lb
 LBLIB_API void lbC_setcast     (lua_State *L, lbC_testfunc tf, lbC_castfunc cf, lbC_Type *t);
 LBLIB_API void lbC_setaccessor (lua_State *L, luaL_Reg *getters, luaL_Reg *setters, lbC_Type *t);
 
+LBLIB_API void lbC_getmetatable (lua_State *L, const void *t);
+
 #define lbC_nobase NULL
 LBLIB_API luaL_Reg lbC_nomt[1];
 
@@ -80,26 +89,18 @@ LBLIB_API luaL_Reg lbC_nomt[1];
       lbC_setmt((L),(funcs),(mt),(t)) )
 
 
-/* maintain lbind's userdata */
-LBLIB_API void  lbind_pushudata  (lua_State *L, const void *obj, const lbC_Type *t);
-LBLIB_API void  lbind_copyudata  (lua_State *L, const void *obj, const lbC_Type *t);
-LBLIB_API void *lbind_toudata    (lua_State *L, int ud);
-LBLIB_API void *lbind_testudata  (lua_State *L, int ud, const lbC_Type *t);
-LBLIB_API void *lbind_checkudata (lua_State *L, int ud, const lbC_Type *t);
-LBLIB_API void *lbind_eraseudata (lua_State *L, int ud);
-
-LBLIB_API void lbind_getmetatable (lua_State *L, const lbC_Type *t);
-
-/* lbind pointer registry */
-LBLIB_API void lbG_register   (lua_State *L, int ud);
-LBLIB_API void lbG_unregister (lua_State *L, int ud);
-LBLIB_API int  lbG_shouldgc   (lua_State *L, int ud);
-
 /* lbind type system */
 LBLIB_API const char *lbC_type      (lua_State *L, int ud);
 LBLIB_API int         lbC_isa       (lua_State *L, int ud, const lbC_Type *t);
 LBLIB_API void       *lbC_cast      (lua_State *L, int ud, const lbC_Type *t);
-LBLIB_API void       *lbC_checkself (lua_State *L, int ud, const lbC_Type *t);
+
+/* lbind object maintain */
+LBLIB_API void  lbO_register    (lua_State *L, const void *p, const lbC_Type *t);
+LBLIB_API void *lbO_unregister  (lua_State *L, int ud);
+LBLIB_API void  lbO_copyobject  (lua_State *L, const void *p, const lbC_Type *t);
+LBLIB_API void *lbO_isobject    (lua_State *L, int ud, const lbC_Type *t);
+LBLIB_API void *lbO_checkobject (lua_State *L, int ud, const lbC_Type *t);
+LBLIB_API void *lbO_toobject    (lua_State *L, int ud);
 
 
 /* lbind metatable routine */

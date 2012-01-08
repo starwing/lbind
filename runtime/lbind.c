@@ -121,7 +121,7 @@ static int lbR_cast(lua_State *L)
         const lbC_Type *t = (const lbC_Type*)lua_touserdata(L, -1);
         void *u;
         if (is_type(L, t, 'c') && (u = lbC_cast(L, -3, t)) != NULL) {
-            lbind_pushudata(L, u, t);
+            lbO_register(L, u, t);
             return 1;
         }
     }
@@ -206,7 +206,7 @@ static int lbR_bases(lua_State *L)
         }
         if (t->bases != NULL) {
             for (i = 1, bi = t->bases; *bi != NULL; ++bi, ++i) {
-                lbind_getmetatable(L, *bi); /* 3 */
+                lbC_getmetatable(L, *bi); /* 3 */
                 if (lua_isnil(L, -1)) {
                     lua_pushlightuserdata(L, *bi); /* 4 */
                     incomplete = 1;

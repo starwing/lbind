@@ -191,50 +191,7 @@ typedef struct {
 #define LBC_HASSETTER   0x02
 #define LBC_HASGETTER   0x04
 
-void lbind_getmetatable(lua_State *L, const lbC_Type *t)
-{
-    lua_rawgetp(L, LUA_REGISTRYINDEX, t);
-}
-
-void lbind_pushudata(lua_State *L, const void *p, const lbC_Type *t)
-{
-    lbind_getpointertable(L);
-    lua_rawgetp(L, -1, p);
-    lua_remove(L, -2);
-    if (lua_isnil(L, -1)) {
-        lbC_Object *obj;
-        lua_pop(L, 1);
-        obj = (lbC_Object*)lua_newuserdata(L, sizeof(lbC_Object)); /* 1 */
-        obj->instance = (void*)p;
-        obj->flags = t->init_flags;
-        lbind_getmetatable(L, t); /* 2 */
-        lua_setmetatable(L, -2); /* 2->1 */
-        lbind_getpointertable(L); /* 2 */
-        lua_pushvalue(L, -2); /* 1->3 */
-        lua_rawsetp(L, -2, p); /* 3->2 */
-        lua_pop(L, 1); /* (2) */
-    }
-}
-
-void lbind_copyudata(lua_State *L, const void *obj, const lbC_Type *t)
-{
-    lbind_getmetatable(L, t);
-    lua_pushliteral(L, "new");
-    lua_rawget(L, -2);
-    if (lua_isnil(L, -1)) {
-        lua_pop(L, 2);
-        lua_pushnil(L);
-    }
-    else {
-        lua_remove(L, -2);
-        lbind_pushudata(L, obj, t);
-        if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
-            lua_pop(L, 1);
-            lua_pushnil(L);
-        }
-        lbG_register(L, -1); /* enable autodeletion for copied stuff */
-    }
-}
+/* lbind memory maintain */
 
 static lbC_Object *to_object(lua_State *L, int ud)
 {
@@ -250,64 +207,6 @@ static lbC_Object *to_object(lua_State *L, int ud)
     }
     return obj;
 }
-
-void *lbind_toudata(lua_State *L, int ud)
-{
-    lbC_Object *obj = to_object(L, ud);
-    return obj == NULL ? NULL : obj->instance;
-}
-
-static int testudata(lua_State *L, int ud, const lbC_Type *t)
-{
-    if (lua_getmetatable(L, ud)) {  /* does it have a metatable? */
-        lbind_getmetatable(L, t); /* get correct metatable */
-        if (!lua_rawequal(L, -1, -2))  /* not the same? */
-            return 0;  /* value is a userdata with wrong metatable */
-        lua_pop(L, 2);  /* remove both metatables */
-        return 1;
-    }
-    return 0;
-}
-
-void *lbind_testudata(lua_State *L, int ud, const lbC_Type *t)
-{
-    lbC_Object *obj = (lbC_Object*)lua_touserdata(L, ud);
-    if (obj != NULL && testudata(L, ud, t))
-        return obj->instance;
-    return NULL;
-}
-
-void *lbind_checkudata(lua_State *L, int ud, const lbC_Type *t)
-{
-    lbC_Object *obj = (lbC_Object*)lua_touserdata(L, ud);
-    if (obj != NULL && obj->instance == NULL)
-        luaL_argerror(L, ud, "null lbind object");
-    else if (obj == NULL || !testudata(L, ud, t))
-        lbind_typeerror(L, ud, t->tname);
-    return obj->instance;
-}
-
-void *lbind_eraseudata(lua_State *L, int ud)
-{
-    void *u = NULL;
-    lbC_Object *obj = (lbC_Object*)lua_touserdata(L, ud);
-    if (obj != NULL) {
-        lbind_getpointertable(L); /* 1 */
-        lua_rawgetp(L, -1, obj->instance); /* 2 */
-        if ((obj = (lbC_Object*)lua_touserdata(L, -1)) != NULL
-                && (u = obj->instance) != NULL) {
-            obj->instance = NULL;
-            obj->flags &= ~LBC_GC;
-            lua_pushnil(L); /* 3 */
-            lua_rawsetp(L, -3, u); /* 3->1 */
-        }
-        lua_pop(L, 2); /* (2)(1) */
-    }
-    return u;
-}
-
-
-/* lbind memory maintain */
 
 void lbG_register(lua_State *L, int narg)
 {
@@ -327,72 +226,6 @@ int lbG_shouldgc(lua_State *L, int narg)
 {
     lbC_Object *obj = to_object(L, narg);
     return obj != NULL && (obj->flags & LBC_GC) != 0;
-}
-
-
-/* lbind type system */
-
-const char *lbC_type(lua_State *L, int narg)
-{
-    lbC_Object *obj = to_object(L, narg);
-    if (obj != NULL) {
-        const lbC_Type *ti = NULL;
-        if (lua_getmetatable(L, narg))
-            return NULL;
-        lbM_getfield(L, lbM_typeinfo);
-        if (!lua_isnil(L, -1))
-            ti = (const lbC_Type*)lua_touserdata(L, -1);
-        lua_pop(L, 2);
-        if (ti != NULL)
-            return ti->tname;
-    }
-    return NULL;
-}
-
-int lbC_isa(lua_State *L, int narg, const lbC_Type *t)
-{
-    if (testudata(L, narg, t))
-        return 1;
-    else {
-        lbC_Type *from_type;
-        if (!lua_getmetatable(L, narg))
-            return 0;
-        lbM_getfield(L, lbM_typeinfo);
-        from_type = (lbC_Type*)lua_touserdata(L, -1);
-        lua_pop(L, 1);
-        if (from_type != NULL && from_type->testfunc != NULL)
-            return from_type->testfunc(L, narg, t);
-    }
-    return 0;
-}
-
-void *lbC_cast(lua_State *L, int narg, const lbC_Type *t)
-{
-    lbC_Object *obj = (lbC_Object*)lua_touserdata(L, narg);
-    lbC_Type *from_type;
-    if (obj == NULL || obj->instance == NULL)
-        return NULL;
-    if (testudata(L, narg, t))
-        return obj->instance;
-    if (!lua_getmetatable(L, narg))
-        return NULL;
-    lbM_getfield(L, lbM_typeinfo);
-    from_type = (lbC_Type*)lua_touserdata(L, -1);
-    lua_pop(L, 1);
-    if (from_type == NULL || from_type->castfunc == NULL)
-        return NULL;
-    return from_type->castfunc(L, narg, t);
-}
-
-void *lbC_checkself(lua_State *L, int ud, const lbC_Type *t)
-{
-    lbC_Object *obj = (lbC_Object*)lua_touserdata(L, ud);
-    void *u = NULL;
-    if (obj != NULL && obj->instance == NULL)
-        luaL_argerror(L, ud, "null lbind object");
-    else if ((u = lbC_cast(L, ud, t)) == NULL)
-        lbind_typeerror(L, ud, t->tname);
-    return u;
 }
 
 
@@ -483,7 +316,7 @@ static int lbM_gc(lua_State *L)
             lua_call(L, 1, 0);
         }
         if (obj->instance != NULL)
-            lbind_eraseudata(L, 1);
+            lbO_unregister(L, 1);
     }
     return 0;
 }
@@ -530,7 +363,7 @@ static int lbM_index(lua_State *L)
     /* find in libtable/superlibtable */
     for (i = 1; !lua_isnone(L, lua_upvalueindex(i)); ++i) {
         if (lua_islightuserdata(L, lua_upvalueindex(i))) {
-            lbind_getmetatable(L, (const lbC_Type*)lua_touserdata(L, lua_upvalueindex(i)));
+            lbC_getmetatable(L, (const lbC_Type*)lua_touserdata(L, lua_upvalueindex(i)));
             if (lua_isnil(L, -1)) {
                 lua_pop(L, 1);
                 continue;
@@ -560,7 +393,7 @@ static void push_indexfunc(lua_State *L, lbC_Type **bases)
     int nups = 1; /* stack: libtable */
     if (bases != NULL) {
         for (; *bases != NULL; ++nups, ++bases) {
-            lbind_getmetatable(L, *bases);
+            lbC_getmetatable(L, *bases);
             if (lua_isnil(L, -1))
                 lua_pushlightuserdata(L, *bases);
             else
@@ -650,6 +483,166 @@ void lbC_setcast(lua_State *L, lbC_testfunc tf, lbC_castfunc cf, lbC_Type *t)
     t->testfunc = tf;
     t->castfunc = cf;
 }
+
+void lbC_getmetatable(lua_State *L, const void *t)
+{
+    lua_rawgetp(L, LUA_REGISTRYINDEX, t);
+}
+
+
+/* lbind type system */
+
+static int testudata(lua_State *L, int ud, const void *t)
+{
+    if (lua_getmetatable(L, ud)) {  /* does it have a metatable? */
+        lbC_getmetatable(L, t); /* get correct metatable */
+        if (!lua_rawequal(L, -1, -2))  /* not the same? */
+            return 0;  /* value is a userdata with wrong metatable */
+        lua_pop(L, 2);  /* remove both metatables */
+        return 1;
+    }
+    return 0;
+}
+
+const char *lbC_type(lua_State *L, int narg)
+{
+    lbC_Object *obj = to_object(L, narg);
+    if (obj != NULL) {
+        const lbC_Type *ti = NULL;
+        if (lua_getmetatable(L, narg))
+            return NULL;
+        lbM_getfield(L, lbM_typeinfo);
+        if (!lua_isnil(L, -1))
+            ti = (const lbC_Type*)lua_touserdata(L, -1);
+        lua_pop(L, 2);
+        if (ti != NULL)
+            return ti->tname;
+    }
+    return NULL;
+}
+
+int lbC_isa(lua_State *L, int narg, const lbC_Type *t)
+{
+    if (testudata(L, narg, t))
+        return 1;
+    else {
+        lbC_Type *from_type;
+        if (!lua_getmetatable(L, narg))
+            return 0;
+        lbM_getfield(L, lbM_typeinfo);
+        from_type = (lbC_Type*)lua_touserdata(L, -1);
+        lua_pop(L, 1);
+        if (from_type != NULL && from_type->testfunc != NULL)
+            return from_type->testfunc(L, narg, t);
+    }
+    return 0;
+}
+
+void *lbC_cast(lua_State *L, int narg, const lbC_Type *t)
+{
+    lbC_Object *obj = (lbC_Object*)lua_touserdata(L, narg);
+    lbC_Type *from_type;
+    if (obj == NULL || obj->instance == NULL)
+        return NULL;
+    if (testudata(L, narg, t))
+        return obj->instance;
+    if (!lua_getmetatable(L, narg))
+        return NULL;
+    lbM_getfield(L, lbM_typeinfo);
+    from_type = (lbC_Type*)lua_touserdata(L, -1);
+    lua_pop(L, 1);
+    if (from_type == NULL || from_type->castfunc == NULL)
+        return NULL;
+    return from_type->castfunc(L, narg, t);
+}
+
+
+/* lbind object maintain */
+
+void lbO_register(lua_State *L, const void *p, const lbC_Type *t)
+{
+    lbind_getpointertable(L); /* 1 */
+    lua_rawgetp(L, -1, p); /* 2 */
+    lua_remove(L, -2); /* (1) */
+    if (lua_isnil(L, -1)) {
+        lbC_Object *obj;
+        lua_pop(L, 1); /* (2) */
+        obj = (lbC_Object*)lua_newuserdata(L, sizeof(lbC_Object)); /* 1 */
+        obj->instance = (void*)p;
+        obj->flags = t->init_flags;
+        lbC_getmetatable(L, t); /* 2 */
+        lua_setmetatable(L, -2); /* 2->1 */
+        lbind_getpointertable(L); /* 2 */
+        lua_pushvalue(L, -2); /* 1->3 */
+        lua_rawsetp(L, -2, p); /* 3->2 */
+        lua_pop(L, 1); /* (2) */
+    }
+}
+
+void *lbO_unregister(lua_State *L, int ud)
+{
+    void *u = NULL;
+    lbC_Object *obj = (lbC_Object*)lua_touserdata(L, ud);
+    if (obj != NULL) {
+        lbind_getpointertable(L); /* 1 */
+        lua_rawgetp(L, -1, obj->instance); /* 2 */
+        if ((obj = (lbC_Object*)lua_touserdata(L, -1)) != NULL
+                && (u = obj->instance) != NULL) {
+            obj->instance = NULL;
+            obj->flags &= ~LBC_GC;
+            lua_pushnil(L); /* 3 */
+            lua_rawsetp(L, -3, u); /* 3->1 */
+        }
+        lua_pop(L, 2); /* (2)(1) */
+    }
+    return u;
+}
+
+void lbO_copyobject(lua_State *L, const void *obj, const lbC_Type *t)
+{
+    lbC_getmetatable(L, t);
+    lua_pushliteral(L, "new");
+    lua_rawget(L, -2);
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 2);
+        lua_pushnil(L);
+    }
+    else {
+        lua_remove(L, -2);
+        lbO_register(L, obj, t);
+        if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+            lua_pop(L, 1);
+            lua_pushnil(L);
+        }
+        lbG_register(L, -1); /* enable autodeletion for copied stuff */
+    }
+}
+
+void *lbO_checkobject(lua_State *L, int ud, const lbC_Type *t)
+{
+    lbC_Object *obj = (lbC_Object*)lua_touserdata(L, ud);
+    void *u = NULL;
+    if (obj != NULL && obj->instance == NULL)
+        luaL_argerror(L, ud, "null lbind object");
+    else if ((u = lbC_cast(L, ud, t)) == NULL)
+        lbind_typeerror(L, ud, t->tname);
+    return u;
+}
+
+void *lbO_isobject(lua_State *L, int ud, const lbC_Type *t)
+{
+    lbC_Object *obj = (lbC_Object*)lua_touserdata(L, ud);
+    if (obj != NULL && testudata(L, ud, t))
+        return obj->instance;
+    return NULL;
+}
+
+void *lbO_toobject(lua_State *L, int ud)
+{
+    lbC_Object *obj = to_object(L, ud);
+    return obj == NULL ? NULL : obj->instance;
+}
+
 
 /*
  * cc: lua='lua52' flags+='-s -O2 -Wall -pedantic -mdll -Id:/$lua/include' libs+='d:/$lua/$lua.dll'
