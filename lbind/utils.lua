@@ -14,6 +14,7 @@ local function expandtab(s)
 end
 
 local function splitlines(t, s)
+    if type(s) == 'table' then s = table.concat(s) end
     local indent = expandtab(s):match "^(%s*)"
     s = string.gsub(s, "(.-)\r*\n", function(s)
         local line = expandtab(s):match("^"..indent.."(.-)%s*$")
@@ -24,7 +25,32 @@ local function splitlines(t, s)
     return t, s:match("^"..indent.."(.-)$") or s:match "^%s*(.-)%s*$"
 end
 
+--- Output String builder constructoer.
+-- this function is used to create a string builder with a table as
+-- string pool.
+--
+--     local pool = {}
+--     local L = utils.builder(pool)
+--
+-- a string builder is used to create a big string, somethimes used to
+-- create program text, a string builder is a function, that accept a
+-- number or a string:
+--  - if a number is given, it will added to indent the lines in
+--    builder.
+--      L(4) -- indent is 4
+--      L(4) -- indent is 8
+--      L(-4) -- indent is 4
+--  - if a string is given, it will be appended to current line, and a
+--    appender will be returned, that means you can use chained
+--    expression:
+--      L"hello" " " "World" "!" -- a line "Hello World!"
+--  - every call to builder start a new line:
+--      L"Hello"
+--      L"World" -- two line "Hello\nWorld"
+-- @param t a string pool used to contain string pieces, to get the
+-- big string itself, just use table.concat(t).
 function M.builder(t)
+    t = t or {}
     local lvl = 0
     local function appender(...)
         t[#t] = t[#t] .. table.concat {...}
@@ -59,6 +85,7 @@ function M.builder(t)
             end
             return header
         end
+        if not indent then return t end
         local preline = t[#t]
         if preline and preline :match "^%s*$" then
             t[#t] = ""

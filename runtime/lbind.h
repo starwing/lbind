@@ -14,6 +14,7 @@
 #  define LUA_OK                        0
 #  define lua_getuservalue              lua_getfenv
 #  define lua_setuservalue              lua_setfenv
+#  define lua_rawlen                    lua_objlen
 #  define luaL_setfuncs(L,l,nups)       luaI_openlib((L),NULL,(l),(nups))
 #  define luaL_newlibtable(L,l)	\
     lua_createtable(L, 0, sizeof(l)/sizeof((l)[0]) - 1)
@@ -22,6 +23,7 @@
 
 LBLIB_API void lua_rawgetp (lua_State *L, int narg, const void *p);
 LBLIB_API void lua_rawsetp (lua_State *L, int narg, const void *p);
+LBLIB_API int  lua_absindex (lua_State *L, int idx);
 
 #endif /* LUA_VERSION_NUM < 502 */
 
@@ -60,32 +62,33 @@ LBLIB_API int  lbG_shouldgc   (lua_State *L, int ud);
  */
 typedef struct lbC_Type lbC_Type;
 
-typedef int (*lbC_testfunc)(lua_State *L, int narg, const lbC_Type *to_type);
 typedef void *(*lbC_castfunc)(lua_State *L, int narg, const lbC_Type *to_type);
 
 struct lbC_Type {
     const char *tname;
     int init_flags;
-    lbC_testfunc testfunc;
     lbC_castfunc castfunc;
     lbC_Type **bases;
 };
 
 /* lbind type registry */
 LBLIB_API void lbC_inittype    (lua_State *L, const char *tname, lbC_Type **bases, lbC_Type *t);
-LBLIB_API void lbC_setmt       (lua_State *L, luaL_Reg *funcs, luaL_Reg *mts, lbC_Type *t);
-LBLIB_API void lbC_setcast     (lua_State *L, lbC_testfunc tf, lbC_castfunc cf, lbC_Type *t);
+LBLIB_API void lbC_setmt       (lua_State *L, lbC_Type *t);
+LBLIB_API void lbC_setcast     (lua_State *L, lbC_castfunc cf, lbC_Type *t);
 LBLIB_API void lbC_setaccessor (lua_State *L, luaL_Reg *getters, luaL_Reg *setters, lbC_Type *t);
 
 LBLIB_API void lbC_getmetatable (lua_State *L, const void *t);
 
-#define lbC_nobase NULL
-LBLIB_API luaL_Reg lbC_nomt[1];
-
-#define lbC_newclass(L,name,funcs,base,mt,t) \
+#define lbC_newclass(L,name,funcs,base,t) \
     ( lbC_inittype((L),(name),(base),(t)), \
-      lua_createtable((L), 0, sizeof(funcs)/sizeof((funcs)[0])), \
-      lua_createtable((L), 0, sizeof(mt)/sizeof((mt)[0]) + 3), \
+      lua_newlib((L), funcs), \
+      lua_createtable((L), 0, 4), \
+      lbC_setmt((L),(funcs),(mt),(t)) )
+
+#define lbC_newclass_meta(L,name,funcs,mt,base,t) \
+    ( lbC_inittype((L),(name),(base),(t)), \
+      lua_newlib((L), funcs), \
+      lua_newlib((L), mt), \
       lbC_setmt((L),(funcs),(mt),(t)) )
 
 
@@ -97,6 +100,7 @@ LBLIB_API void       *lbC_cast      (lua_State *L, int ud, const lbC_Type *t);
 /* lbind object maintain */
 LBLIB_API void  lbO_register    (lua_State *L, const void *p, const lbC_Type *t);
 LBLIB_API void *lbO_unregister  (lua_State *L, int ud);
+LBLIB_API int   lbO_retrieve    (lua_State *L, const void *p);
 LBLIB_API void  lbO_copyobject  (lua_State *L, const void *p, const lbC_Type *t);
 LBLIB_API void *lbO_isobject    (lua_State *L, int ud, const lbC_Type *t);
 LBLIB_API void *lbO_checkobject (lua_State *L, int ud, const lbC_Type *t);
@@ -123,23 +127,24 @@ typedef struct {
 
 typedef struct {
     const char *name;
+    int flags;
     lbE_Enum *enums;
 } lbE_EnumType;
 
 LBLIB_API void lbE_initenum (lua_State *L, const char *name, lbE_Enum *enums, lbE_EnumType *et);
+LBLIB_API void lbE_setbitflag (lua_State *L, int isbitfielded, lbE_EnumType *et);
 
 LBLIB_API int  lbE_isenum    (lua_State *L, int narg, lbE_EnumType *et);
 LBLIB_API void lbE_pushenum  (lua_State *L, int evalue, lbE_EnumType *et);
 LBLIB_API int  lbE_toenum    (lua_State *L, int narg, lbE_EnumType *et);
 LBLIB_API int  lbE_checkenum (lua_State *L, int narg, lbE_EnumType *et);
 
-#define lbC_newenum(L,name,enums,et) \
+#define LBE_NORMAL          0
+#define LBE_BITFIELD        1
+#define lbE_newenum(L,name,enums,bf,et) \
     ( luaL_newlibtable((L), (enums)), \
-      lbE_initenum((L), (name), (enums), (et)) )
-
-/* lbind template runtime */
-
-LBLIB_API int lbT_newtemplate (lua_State *L, luaL_Reg *temps, const char *tname);
+      lbE_initenum((L), (name), (enums), (et)), \
+      (void)(bf && lbE_setbitflag((L), bf, (et))))
 
 
 #endif /* LBIND_H */

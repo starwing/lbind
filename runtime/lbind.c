@@ -52,15 +52,25 @@ static int lbR_owner(lua_State *L)
     return top;
 }
 
+static int lbR_null(lua_State *L)
+{
+    const void *u = lbO_toobject(L, -1);
+    if (u != NULL)
+        lua_pushlightuserdata(L, (void*)u);
+    else
+        lua_pushnil(L);
+    return 1;
+}
+
 static int lbR_valid(lua_State *L)
 {
     const void *u = lua_touserdata(L, -1);
     if (u != NULL) {
         lbind_getpointertable(L);
         lua_rawgetp(L, -1, u);
-        return lua_isnil(L, -1);
     }
-    lua_pushnil(L);
+    else
+        lua_pushnil(L);
     return 1;
 }
 
@@ -268,6 +278,7 @@ static luaL_Reg lbind_funcs[] = {
     { "info",       lbind_getinfo  },
     { "isa",        lbR_isa        },
     { "methods",    lbR_methods    },
+    { "null",       lbR_null       },
     { "owner",      lbR_owner      },
     { "register",   lbR_register   },
     { "type",       lbR_type       },

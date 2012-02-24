@@ -88,9 +88,16 @@ static int toenum(lua_State *L, int narg, lbE_EnumType *et, int check)
         return value;
     if ((str = lua_tostring(L, narg)) != NULL) {
         int success;
-        lua_rawgetp(L, LUA_REGISTRYINDEX, et);
-        success = parse_enum(L, str, &value, check);
-        lua_pop(L, 1);
+        lua_rawgetp(L, LUA_REGISTRYINDEX, et); /* 1 */
+        if (et->flags & LBE_BITFIELD)
+            success = parse_enum(L, str, &value, check);
+        else {
+            narg = lua_absindex(L, narg);
+            lua_pushvalue(L, narg); /* narg->2 */
+            lua_rawget(L, -2); /* 2->2 */
+            success = (value = lua_tonumber(L, -1)) != 0 || lua_isnumber(L, -1);
+        }
+        lua_pop(L, 1); /* (2) */
         if (success)
             return value;
     }
@@ -114,6 +121,7 @@ void lbE_initenum(lua_State *L, const char *name, lbE_Enum *enums, lbE_EnumType 
     /* stack: etable */
     et->name = name;
     et->enums = enums;
+    et->flags = 0;
 
     for (; enums->name != NULL; ++enums) {
         lua_pushstring(L, enums->name); /* 1 */
@@ -146,6 +154,14 @@ void lbE_initenum(lua_State *L, const char *name, lbE_Enum *enums, lbE_EnumType 
     /* set enum table to registry */
     lua_pushvalue(L, -1); /* 1 */
     lua_rawsetp(L, LUA_REGISTRYINDEX, et); /* 1->env */
+}
+
+void lbE_setbitflag(lua_State *L, int isbitflag, lbE_EnumType *et)
+{
+    if (isbitflag)
+        et->flags |= LBE_BITFIELD;
+    else
+        et->flags &= ~LBE_BITFIELD;
 }
 
 /*
