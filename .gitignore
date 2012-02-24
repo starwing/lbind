@@ -1,8 +1,11 @@
 build
 bench.c
 test.lua
+test.c
 tags*
 */tags*
-*.exe
+*.css
 *.dll
+*.exe
+*.html
 *~
