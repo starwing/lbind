@@ -10,9 +10,6 @@ module 'gd' {
     };
 
     object "gdImage" {
-        include "errno.h";
-        include "string.h";
-
         method "new" :cname "gdImageCreate"
             (int "sx", int "sy") :rets(selfType:ptr());
         method "newTrueColor" :cname "gdImageCreateTrueColor"
@@ -22,6 +19,9 @@ module 'gd' {
             (int "r", int "g", int "b");
         method "line" :cname "gdImageLine"
             (int "x1", int "y1", int "x2", int "y2", int "color");
+
+        include "errno.h";
+        include "string.h";
         method "toPNG" (char:const():ptr "name") :body [[
             FILE *pngout = fopen(name, "wb");
             if (pngout == NULL) {
@@ -31,6 +31,8 @@ module 'gd' {
             }
             gdImagePng(self, pngout);
             fclose(pngout);
+            lua_pushboolean(L, 1);
+            return 1;
         ]]
     };
 };
