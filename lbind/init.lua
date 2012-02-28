@@ -23,7 +23,14 @@ local function codemethod(name)
         if self[last] then
             self[last][name] = t
         end
-        return t
+        return self
+    end
+end
+
+local function stringmethod(name)
+    return function(self, value)
+        self[name] = utils.trim(value)
+        return self
     end
 end
 
@@ -31,11 +38,12 @@ local function vamethod(name, new)
     return function(self, ...)
         local t = {...}
         local cur
-        if new then
+        local last = #self
+        if new or last == 0 then
             cur = {}
-            self[#self+1] = cur
+            self[last+1] = cur
         else
-            cur = self[#self]
+            cur = self[last]
         end
         if cur then
             cur[name] = t
@@ -45,57 +53,34 @@ local function vamethod(name, new)
 end
 
 local function aliasmethod(self, name)
-    local alias = self.alias
-    if not alias then
-        alias = {}
-        self.alias = alias
+    local names = self.names
+    if not names then
+        names = {}
+        self.names = names
     end
-    alias[#alias+1] = name
+    names[#names+1] = name
     return self
-end
-
-local function boolmethod(name, global)
-    return function(self, flag, value)
-        if value == nil then
-            value = true
-        end
-        if global then
-            self[flag] = value
-        else
-            local last = #self
-            if self[last] then
-                self[last][flag] = value
-            end
-        end
-        return self
-    end
 end
 
 local funcMT = {
     alias = aliasmethod,
-    args = vamethod 'args',
+    args = vamethod('args', 'new'),
     rets = vamethod 'rets',
+    body = codemethod 'body',
     call = codemethod 'call',
-    code = codemethod 'code',
     post = codemethod 'post',
     prev = codemethod 'prev',
+    cname = stringmethod 'cname',
+    lname = stringmethod 'lname',
 }
 funcMT.__index = funcMT
 funcMT.__call = funcMT.args
 
 local function func(name, tag)
-    return setmetatable({tag = tag or "func"}, funcMT)
-end
-
-local function var(ctype, tag)
-    return function(name)
-        return function(body)
-            body.tag = tag or 'var'
-            body.type = ctype
-            body.name = name
-            return body
-        end
-    end
+    return setmetatable({
+        name = name,
+        tag = tag or "func",
+    }, funcMT)
 end
 
 function M.export(t)
@@ -149,14 +134,6 @@ end
 
 function M.func(name)
     return func(name)
-end
-
-function M.field(ctype)
-    return var(ctype, "field")
-end
-
-function M.var(ctype)
-    return var(ctype)
 end
 
 return M

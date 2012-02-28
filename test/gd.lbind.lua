@@ -1,8 +1,9 @@
+package.path = package.path .. ";../?/init.lua;../?.lua"
 require 'lbind'.export(_ENV)
 local types = require 'lbind.types'.export(_ENV)
 local C = types.class
 
-module 'gd' {
+local t = module 'gd' {
     export = true,
     include "gd.h";
     subfiles {
@@ -33,6 +34,10 @@ module 'gd' {
             fclose(pngout);
             lua_pushboolean(L, 1);
             return 1;
-        ]]
+        ]];
     };
 };
+
+local utils = require 'lbind.utils'
+--print(type(t))
+print(utils.tostring(t))
