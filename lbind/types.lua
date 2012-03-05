@@ -1,9 +1,29 @@
 package.path = package.path .. ";../?.lua"
-local luatype = type
 local utils = require 'lbind.utils'
 local M = {}
-local B = {}
 local T = {}
+
+local typeMT, varMT
+
+local function typedecl(name, tag)
+    local t = T[name]
+    if t then return t end
+    t = setmetatable({
+        name = name,
+        tag = tag or "type",
+    }, typeMT)
+    T[name] = t
+    return t
+end
+
+-- methods in metatables
+
+local function rawmethod(name)
+    return function(self, value)
+        self[name] = value
+        return self
+    end
+end
 
 local function boolmethod(name)
     return function(self, value)
@@ -37,27 +57,52 @@ local function templatemethod(name)
     end
 end
 
-local function cvmethod(cv)
+local function find_type(tname, key)
+    local t = T[tname]
+    if not t then
+        t = typedecl(tname, tag)
+        t[key] = true
+    elseif not t[key] then
+        error("imcompatile type: "..tname, 2)
+    end
+    return t
+end
+
+local function qualmethod(qual)
+    local key = "is_"..qual
+    local prefix = qual.."_"
     return function(self)
-        local tname = cv.." "..self.name
-        local t = B[tname] or T[tname]
-        if not t then
-            t = self:copy()
-            t[cv] = true
-            T[tname] = t
-        end
-        return t
+        if self[key] then return self end
+        return find_type(prefix..self.name, key)
     end
 end
 
-local typeMT = {
-    ctype     = stringmethod 'ctype',
-    ltype     = stringmethod 'ltype',
-    const     = cvmethod 'const',
-    volatile  = cvmethod 'volatile',
-    arg       = stringmethod 'arg',
-    assign    = stringmethod 'assign',
-    initvalue = stringmethod 'initvalue',
+local function indirmethod(indir)
+    local key = "is_"..indir
+    local postfix = "_"..indir:sub(1,1)
+    return function(self, name, tag)
+        if type(name) == 'string' then -- declare new variable
+            local var = self(name, tag)
+            var[key] = true
+            return var
+        end
+
+        if self[key] then return self end
+        return find_type(self.name..postfix, key)
+    end
+end
+
+typeMT = {
+    extends   =      rawmethod 'base',
+    ctype     =   stringmethod 'type_c',
+    ltype     =   stringmethod 'type_lua',
+    const     =     qualmethod 'const',
+    volatile  =     qualmethod 'volatile',
+    ptr       =    indirmethod 'ptr',
+    ref       =    indirmethod 'ref',
+    arg       =   stringmethod 'arg_tpl',
+    assign    =   stringmethod 'assign_tpl',
+    initvalue =   stringmethod 'initvalue_tpl',
     check     = templatemethod "check",
     is        = templatemethod "is",
     opt       = templatemethod "opt",
@@ -65,14 +110,6 @@ local typeMT = {
     to        = templatemethod "to",
 }
 typeMT.__index = typeMT
-
-function typeMT:copy()
-    local t = {}
-    for k, v in pairs(self) do
-        t[k] = v
-    end
-    return setmetatable(t, typeMT)
-end
 
 function typeMT:set(key)
     if type(key) == 'table' then
@@ -88,23 +125,14 @@ function typeMT:set(key)
     return self
 end
 
-function typeMT:ptr(name, tag)
-    local tv = self(name, tag)
-    tv.ptr = true
-    return tv
-end
-
-function typeMT:ref(name, tag)
-    local tv = self(name, tag)
-    tv.ref = true
-    return tv
-end
-
-local objMT = {
-    ptr = function(self, name) return self.type:ptr(name) end,
-    ref = function(self, name) return self.type:ref(name) end,
+varMT = {
+    const    =   boolmethod 'is_const',
+    volatile =   boolmethod 'is_volatile',
+    ptr      =   boolmethod "is_ptr",
+    ref      =   boolmethod "is_ref",
+    opt      = stringmethod "opt_tpl",
 }
-objMT = objMT.__index
+varMT.__index = varMT
 
 -- using __call, ptr, ref to create var instance.
 function typeMT:__call(name, tag)
@@ -112,16 +140,7 @@ function typeMT:__call(name, tag)
         tag = tag or "var",
         name = name,
         type = self,
-    }, objMT)
-end
-
-local function typedecl(name, tag)
-    local t = B[name] or T[name]
-    if t then return t end
-    return setmetatable({
-        name = name,
-        tag = tag or "type",
-    }, typeMT)
+    }, varMT)
 end
 
 local function inttype(name, ctype)
@@ -163,35 +182,34 @@ end
 
 local function classtype(name, ctype)
     local t = typedecl(name):ctype(ctype or name)
-    T[name] = t
     return t
 end
 
 -- C part
-B.char = inttype "char"
-B.uchar = inttype "unsigned char"
-B.short = inttype "short int"
-B.ushort = inttype "unsigned short int"
-B.int = inttype "int"
-B.ushort = inttype "unsigned int"
-B.long = inttype "long int"
-B.ulong = inttype "unsigned long int"
-B.size_t = inttype "size_t"
-B.ssize_t = inttype "ssize_t"
-B.int8_t = fixinttype(8)
-B.uint8_t = fixinttype(8, "u")
-B.int16_t = fixinttype(16)
-B.uint16_t = fixinttype(16, "u")
-B.int32_t = fixinttype(32)
-B.uint32_t = fixinttype(32, "u")
-B.int64_t = fixinttype(64)
-B.uint64_t = fixinttype(64, "u")
-B.float = numbertype "float"
-B.double = numbertype "double"
-B.ldouble = numbertype "long double"
-B.const_char_p = stringtype "const char *"
-B.char_p = stringtype "char *"
-B.uchar_p = stringtype "unsigned char *"
+inttype "char"            :ctype "char"
+inttype "uchar"           :ctype "unsigned char"
+inttype "short"           :ctype "short int"
+inttype "ushort"          :ctype "unsigned short int"
+inttype "int"             :ctype "int"
+inttype "uint"            :ctype "unsigned int"
+inttype "long"            :ctype "long int"
+inttype "ulong"           :ctype "unsigned long int"
+inttype "size_t"
+inttype "ssize_t"
+fixinttype(8)
+fixinttype(8, "u")
+fixinttype(16)
+fixinttype(16, "u")
+fixinttype(32)
+fixinttype(32, "u")
+fixinttype(64)
+fixinttype(64, "u")
+numbertype "float"
+numbertype "double"
+numbertype "ldouble"      :ctype "long double"
+stringtype "char_p"       :ctype "char *"
+stringtype "const_char_p" :ctype "const char *"
+stringtype "uchar_p"      :ctype "unsigned char *"
 
 -- C++ part
 
@@ -203,27 +221,45 @@ function M.export(t)
     return M
 end
 
+function M.dyn_export(t)
+    local mt = getmetatable(t)
+    local old_index = mt.__index
+    if old_index then
+        if type(old_index) == 'table' then
+            function mt:__index(key)
+                return old_index[key] or T[key]
+            end
+        elseif type(old_index) == 'function'then
+            function mt:__index(key)
+                return old_index(self, key) or T[key]
+            end
+        end
+    else
+        mt.__index = T
+    end
+    return M
+end
+
 function M.basetypes(t)
     if t then
-        for k, v in pairs(B) do
+        for k, v in pairs(T) do
             t[k] = v
         end
     end
-    return B
+    return T
 end
 
 function M.typedecl(name)
     local t = typedecl(name)
-    B[name] = t
+    T[name] = t
     return t
 end
 
 function M.class(name)
     local t = classtype(name)
-    T[name] = t
     return t
 end
 
-M.selfType = classtype "__self__"
+M.selfType = classtype "<self>"
 
 return M
