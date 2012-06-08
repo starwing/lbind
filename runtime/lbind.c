@@ -2,6 +2,18 @@
 #include "lbind.h"
 
 
+/* lbind class register */
+
+void lbind_register(lua_State *L, lb_Reg *reg) {
+    lua_getfield(L, LUA_REGISTRYINDEX, "_PRELOAD");
+    for (; reg->name != NULL; ++reg) {
+        lua_pushstring(L, reg->name);
+        lua_pushcfunction(L, reg->open_func);
+        lua_rawset(L, -3);
+    }
+    lua_pop(L, 1);
+}
+
 /* lbind error maintain */
 
 int lbind_typeerror(lua_State *L, int narg, const char *tname)
@@ -174,7 +186,7 @@ static int lbR_type(lua_State *L)
 static int get_classmt(lua_State *L)
 {
     return ((lua_islightuserdata(L, -1)
-             && is_type(L, lua_touserdata(L, -1), 'c'))
+                && is_type(L, lua_touserdata(L, -1), 'c'))
             || (lua_istable(L, -1) && get_libmeta(L))
             || (lua_getmetatable(L, -1)));
 }
@@ -271,20 +283,23 @@ static int lbR_enum(lua_State *L)
 }
 
 static luaL_Reg lbind_funcs[] = {
-    { "bases",      lbR_bases      },
-    { "cast",       lbR_cast       },
-    { "delete",     lbR_delete     },
-    { "enum",       lbR_enum       },
-    { "info",       lbind_getinfo  },
-    { "isa",        lbR_isa        },
-    { "methods",    lbR_methods    },
-    { "null",       lbR_null       },
-    { "owner",      lbR_owner      },
-    { "register",   lbR_register   },
-    { "type",       lbR_type       },
-    { "unregister", lbR_unregister },
-    { "valid",      lbR_valid      },
-    { NULL, NULL },
+#define lbR_info lbind_getinfo
+#define ENTRY(name) { #name, lbR_##name }
+    ENTRY(bases),
+    ENTRY(cast),
+    ENTRY(delete),
+    ENTRY(enum),
+    ENTRY(info),
+    ENTRY(isa),
+    ENTRY(methods),
+    ENTRY(null),
+    ENTRY(owner),
+    ENTRY(register),
+    ENTRY(type),
+    ENTRY(unregister),
+    ENTRY(valid),
+#undef ENTRY
+    { NULL, NULL }
 };
 
 int luaopen_lbind(lua_State *L)
