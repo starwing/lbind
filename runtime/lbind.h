@@ -6,7 +6,8 @@
 #include <lauxlib.h>
 
 
-#define LB_API LUA_API
+#define LB_API      LUA_API
+#define LBLIB_API   LUALIB_API
 
 
 /* compatible apis */
@@ -90,15 +91,15 @@ LB_API void lbC_getmetatable (lua_State *L, const void *t);
 
 #define lbC_newclass(L,name,funcs,base,t) \
     ( lbC_inittype((L),(name),(base),(t)), \
-      lua_newlib((L), funcs), \
+      luaL_newlib((L), funcs), \
       lua_createtable((L), 0, 4), \
-      lbC_setmt((L),(funcs),(mt),(t)) )
+      lbC_setmt((L), (t)) )
 
 #define lbC_newclass_meta(L,name,funcs,mt,base,t) \
     ( lbC_inittype((L),(name),(base),(t)), \
-      lua_newlib((L), funcs), \
-      lua_newlib((L), mt), \
-      lbC_setmt((L),(funcs),(mt),(t)) )
+      luaL_newlib((L), funcs), \
+      luaL_newlib((L), mt), \
+      lbC_setmt((L), (t)) )
 
 
 /* lbind type system */

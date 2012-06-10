@@ -41,14 +41,18 @@ int lbind_matcherror(lua_State *L, const char *extramsg)
 
 static int lbR_register(lua_State *L)
 {
-    lbG_register(L, -1);
-    return 1;
+    int i, top = lua_gettop(L);
+    for (i = 1; i <= top; ++i)
+        lbG_register(L, i);
+    return top;
 }
 
 static int lbR_unregister(lua_State *L)
 {
-    lbG_unregister(L, -1);
-    return 1;
+    int i, top = lua_gettop(L);
+    for (i = 1; i <= top; ++i)
+        lbG_unregister(L, i);
+    return top;
 }
 
 static int lbR_owner(lua_State *L)
