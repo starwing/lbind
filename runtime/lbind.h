@@ -6,7 +6,7 @@
 #include <lauxlib.h>
 
 
-#define LBLIB_API LUALIB_API
+#define LB_API LUA_API
 
 
 /* compatible apis */
@@ -21,9 +21,9 @@
 #  define luaL_newlib(L,l) \
     (luaL_newlibtable(L,l), luaL_setfuncs(L,l,0))
 
-LBLIB_API void lua_rawgetp (lua_State *L, int narg, const void *p);
-LBLIB_API void lua_rawsetp (lua_State *L, int narg, const void *p);
-LBLIB_API int  lua_absindex (lua_State *L, int idx);
+LB_API void lua_rawgetp (lua_State *L, int narg, const void *p);
+LB_API void lua_rawsetp (lua_State *L, int narg, const void *p);
+LB_API int  lua_absindex (lua_State *L, int idx);
 
 #endif /* LUA_VERSION_NUM < 502 */
 
@@ -33,32 +33,41 @@ LBLIB_API int  lua_absindex (lua_State *L, int idx);
 LUALIB_API int lbind_getinfo (lua_State *L);
 LUALIB_API int luaopen_lbind (lua_State *L);
 
+/* lbind class register */
+
+typedef struct {
+    const char    *name; /* name of library */
+    lua_CFunction  open_func; /* luaopen_ function of library */
+} lb_Reg;
+
+void lbind_register (lua_State *L, lb_Reg *reg);
+
 /* lbind error process */
 
-LBLIB_API int lbind_typeerror  (lua_State *L, int narg, const char *tname);
-LBLIB_API int lbind_matcherror (lua_State *L, const char *extramsg);
+LB_API int lbind_typeerror  (lua_State *L, int narg, const char *tname);
+LB_API int lbind_matcherror (lua_State *L, const char *extramsg);
 
 /* lbind global informations */
 
-LBLIB_API void lbind_getpointertable (lua_State *L);
-LBLIB_API void lbind_gettypemaptable (lua_State *L);
-LBLIB_API void lbind_getlibmaptable  (lua_State *L);
-LBLIB_API void lbind_getlibmeta      (lua_State *L);
-LBLIB_API void lbind_getenummeta     (lua_State *L);
+LB_API void lbind_getpointertable (lua_State *L);
+LB_API void lbind_gettypemaptable (lua_State *L);
+LB_API void lbind_getlibmaptable  (lua_State *L);
+LB_API void lbind_getlibmeta      (lua_State *L);
+LB_API void lbind_getenummeta     (lua_State *L);
 
 /* lbind pointer registry */
 
-LBLIB_API void lbG_register   (lua_State *L, int ud);
-LBLIB_API void lbG_unregister (lua_State *L, int ud);
-LBLIB_API int  lbG_shouldgc   (lua_State *L, int ud);
+LB_API void lbG_register   (lua_State *L, int ud);
+LB_API void lbG_unregister (lua_State *L, int ud);
+LB_API int  lbG_shouldgc   (lua_State *L, int ud);
 
 /* lbind class runtime */
 
 /*
  * NOTE: all types must have a global Type structure. its address used
  * to find the right informations about type. So all const lbC_Type *t
- * argument must be &var, where var is declared by LBLIB_API, e.g.
- * LBLIB_API lbC_Type basetype;
+ * argument must be &var, where var is declared by LB_API, e.g.
+ * LB_API lbC_Type basetype;
  */
 typedef struct lbC_Type lbC_Type;
 
@@ -72,12 +81,12 @@ struct lbC_Type {
 };
 
 /* lbind type registry */
-LBLIB_API void lbC_inittype    (lua_State *L, const char *tname, lbC_Type **bases, lbC_Type *t);
-LBLIB_API void lbC_setmt       (lua_State *L, lbC_Type *t);
-LBLIB_API void lbC_setcast     (lua_State *L, lbC_castfunc cf, lbC_Type *t);
-LBLIB_API void lbC_setaccessor (lua_State *L, luaL_Reg *getters, luaL_Reg *setters, lbC_Type *t);
+LB_API void lbC_inittype    (lua_State *L, const char *tname, lbC_Type **bases, lbC_Type *t);
+LB_API void lbC_setmt       (lua_State *L, lbC_Type *t);
+LB_API void lbC_setcast     (lua_State *L, lbC_castfunc cf, lbC_Type *t);
+LB_API void lbC_setaccessor (lua_State *L, luaL_Reg *getters, luaL_Reg *setters, lbC_Type *t);
 
-LBLIB_API void lbC_getmetatable (lua_State *L, const void *t);
+LB_API void lbC_getmetatable (lua_State *L, const void *t);
 
 #define lbC_newclass(L,name,funcs,base,t) \
     ( lbC_inittype((L),(name),(base),(t)), \
@@ -93,18 +102,18 @@ LBLIB_API void lbC_getmetatable (lua_State *L, const void *t);
 
 
 /* lbind type system */
-LBLIB_API const char *lbC_type      (lua_State *L, int ud);
-LBLIB_API int         lbC_isa       (lua_State *L, int ud, const lbC_Type *t);
-LBLIB_API void       *lbC_cast      (lua_State *L, int ud, const lbC_Type *t);
+LB_API const char *lbC_type (lua_State *L, int ud);
+LB_API int         lbC_isa  (lua_State *L, int ud, const lbC_Type *t);
+LB_API void       *lbC_cast (lua_State *L, int ud, const lbC_Type *t);
 
 /* lbind object maintain */
-LBLIB_API void  lbO_register    (lua_State *L, const void *p, const lbC_Type *t);
-LBLIB_API void *lbO_unregister  (lua_State *L, int ud);
-LBLIB_API int   lbO_retrieve    (lua_State *L, const void *p);
-LBLIB_API void  lbO_copyobject  (lua_State *L, const void *p, const lbC_Type *t);
-LBLIB_API void *lbO_isobject    (lua_State *L, int ud, const lbC_Type *t);
-LBLIB_API void *lbO_checkobject (lua_State *L, int ud, const lbC_Type *t);
-LBLIB_API void *lbO_toobject    (lua_State *L, int ud);
+LB_API void  lbO_register    (lua_State *L, const void *p, const lbC_Type *t);
+LB_API void *lbO_unregister  (lua_State *L, int ud);
+LB_API int   lbO_retrieve    (lua_State *L, const void *p);
+LB_API void  lbO_copyobject  (lua_State *L, const void *p, const lbC_Type *t);
+LB_API void *lbO_isobject    (lua_State *L, int ud, const lbC_Type *t);
+LB_API void *lbO_checkobject (lua_State *L, int ud, const lbC_Type *t);
+LB_API void *lbO_toobject    (lua_State *L, int ud);
 
 
 /* lbind metatable routine */
@@ -131,13 +140,13 @@ typedef struct {
     lbE_Enum *enums;
 } lbE_EnumType;
 
-LBLIB_API void lbE_initenum (lua_State *L, const char *name, lbE_Enum *enums, lbE_EnumType *et);
-LBLIB_API void lbE_setbitflag (lua_State *L, int isbitfielded, lbE_EnumType *et);
+LB_API void lbE_initenum (lua_State *L, const char *name, lbE_Enum *enums, lbE_EnumType *et);
+LB_API void lbE_setbitflag (lua_State *L, int isbitfielded, lbE_EnumType *et);
 
-LBLIB_API int  lbE_isenum    (lua_State *L, int narg, lbE_EnumType *et);
-LBLIB_API void lbE_pushenum  (lua_State *L, int evalue, lbE_EnumType *et);
-LBLIB_API int  lbE_toenum    (lua_State *L, int narg, lbE_EnumType *et);
-LBLIB_API int  lbE_checkenum (lua_State *L, int narg, lbE_EnumType *et);
+LB_API int  lbE_isenum    (lua_State *L, int narg, lbE_EnumType *et);
+LB_API void lbE_pushenum  (lua_State *L, int evalue, lbE_EnumType *et);
+LB_API int  lbE_toenum    (lua_State *L, int narg, lbE_EnumType *et);
+LB_API int  lbE_checkenum (lua_State *L, int narg, lbE_EnumType *et);
 
 #define LBE_NORMAL          0
 #define LBE_BITFIELD        1
