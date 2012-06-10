@@ -1,6 +1,8 @@
 #define LUA_LIB
 #include "lbind.h"
 
+#include <assert.h>
+
 
 #if LUA_VERSION_NUM < 502
 void lua_rawgetp(lua_State *L, int narg, const void *p) {
@@ -24,33 +26,12 @@ int lua_absindex(lua_State *L, int idx) {
 
 /* lbind global informations */
 
-#define lbind_ptrbox        "lbind-pointer-box"
-#define lbind_typebox       "lbind-typeinfo-box"
-#define lbind_libbox        "lbind-libtable-box"
-#define lbind_enummeta      "lbind-enum-metatable"
-#define lbind_libmeta       "lbind-lib-metatable"
-
-static int rawget_staticptr(lua_State *L, const char *staticptr, const void **pcache) {
-    if (*pcache == NULL) {
-        lua_pushstring(L, staticptr); /* 1 */
-        lua_rawget(L, LUA_REGISTRYINDEX); /* 1->1 */
-        if (lua_islightuserdata(L, -1))
-            *pcache = lua_touserdata(L, -1);
-        else {
-            lua_pushstring(L, staticptr); /* 2 */
-            lua_pushlightuserdata(L, (void*)staticptr); /* 3 */
-            lua_rawset(L, LUA_REGISTRYINDEX); /* 2,3->env */
-            *pcache = (const void*)staticptr;
-        }
-        lua_pop(L, 1); /* (1) */
-    }
-    lua_rawgetp(L, LUA_REGISTRYINDEX, *pcache); /* 1 */
-    if (lua_isnil(L, -1)) {
-        lua_pop(L, 1);
-        return 0;
-    }
-    return 1;
-}
+/* algorithm (perl): "0xFB" . (unpack "H*", pack "H*", $str) */
+#define lbind_ptrbox    ((void*)0xFB9DBB81)  /* ptrbox */
+#define lbind_typebox   ((void*)0xFBD2927F)  /* typinf */
+#define lbind_libbox    ((void*)0xFB52BB81)  /* libbox */
+#define lbind_libmeta   ((void*)0xFB52B6ED)  /* libmet */
+#define lbind_enummeta  ((void*)0xFBE7E6ED)  /* enumet */
 
 static void setnewtable(lua_State *L, const void *p, const char *config) {
     lua_newtable(L); /* 1 */
@@ -66,30 +47,27 @@ static void setnewtable(lua_State *L, const void *p, const char *config) {
 }
 
 void lbind_getpointertable(lua_State *L) {
-    static const char ptrbox_archor[] = lbind_ptrbox;
-    static const void *ptrbox = NULL;
-
-    /*printf("lbind_getpointertable!!\n");*/
-    if (!rawget_staticptr(L, ptrbox_archor, &ptrbox))
-        setnewtable(L, ptrbox, "v");
-    /*printf("ptrbox: %s\n", luaL_tolstring(L, -1, NULL));*/
-    /*lua_pop(L, 1);*/
+    lua_rawgetp(L, LUA_REGISTRYINDEX, lbind_ptrbox);
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        setnewtable(L, lbind_ptrbox, "v");
+    }
 }
 
 void lbind_gettypemaptable(lua_State *L) {
-    static const char typeinfo_archor[] = lbind_typebox;
-    static const void *typeinfo = NULL;
-
-    if (!rawget_staticptr(L, typeinfo_archor, &typeinfo))
-        setnewtable(L, typeinfo, NULL);
+    lua_rawgetp(L, LUA_REGISTRYINDEX, lbind_typebox);
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        setnewtable(L, lbind_typebox, "v");
+    }
 }
 
 void lbind_getlibmaptable(lua_State *L) {
-    static const char libbox_archor[] = lbind_libbox;
-    static const void *libbox = NULL;
-
-    if (!rawget_staticptr(L, libbox_archor, &libbox))
-        setnewtable(L, libbox, "k");
+    lua_rawgetp(L, LUA_REGISTRYINDEX, lbind_libbox);
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        setnewtable(L, lbind_libbox, "v");
+    }
 }
 
 static int libcall_helper(lua_State *L) {
@@ -103,11 +81,10 @@ static int libcall_helper(lua_State *L) {
 }
 
 void lbind_getlibmeta(lua_State *L) {
-    static const char libmeta_archor[] = lbind_libmeta;
-    static const void *libmeta = NULL;
-
-    if (!rawget_staticptr(L, libmeta_archor, &libmeta)) {
-        setnewtable(L, libmeta, NULL);
+    lua_rawgetp(L, LUA_REGISTRYINDEX, lbind_libmeta);
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        setnewtable(L, lbind_libmeta, NULL);
         lua_pushliteral(L, "__call"); /* 2 */
         lua_pushcfunction(L, libcall_helper); /* 3 */
         lua_rawset(L, -3); /* 2,3->1 */
@@ -126,11 +103,10 @@ static int enumcall_helper(lua_State *L) {
 }
 
 void lbind_getenummeta(lua_State *L) {
-    static const char enummeta_archor[] = lbind_enummeta;
-    static const void *enummeta = NULL;
-
-    if (!rawget_staticptr(L, enummeta_archor, &enummeta)) {
-        setnewtable(L, enummeta, NULL);
+    lua_rawgetp(L, LUA_REGISTRYINDEX, lbind_enummeta);
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        setnewtable(L, lbind_enummeta, NULL);
         lua_pushliteral(L, "__call"); /* 2 */
         lua_pushcfunction(L, enumcall_helper); /* 3 */
         lua_rawset(L, -3); /* 2,3->1 */
@@ -144,12 +120,12 @@ int lbind_getinfo(lua_State *L) {
     X( 3, "libmap",       lbind_getlibmaptable(L)) \
     X( 4, "libmeta",      lbind_getlibmeta(L)) \
     X( 5, "enummeta",     lbind_getenummeta(L)) \
-    X( 6, "pointers_key", lua_getfield(L, LUA_REGISTRYINDEX, lbind_ptrbox)) \
-    X( 7, "types_key",    lua_getfield(L, LUA_REGISTRYINDEX, lbind_typebox)) \
-    X( 8, "libmap_key",   lua_getfield(L, LUA_REGISTRYINDEX, lbind_libbox)) \
-    X( 9, "libmeta_key",  lua_getfield(L, LUA_REGISTRYINDEX, lbind_libmeta)) \
-    X(10, "enummeta_key", lua_getfield(L, LUA_REGISTRYINDEX, lbind_enummeta)) \
-     
+    X( 6, "pointers_key", lua_pushlightuserdata(L, lbind_ptrbox)) \
+    X( 7, "types_key",    lua_pushlightuserdata(L, lbind_typebox)) \
+    X( 8, "libmap_key",   lua_pushlightuserdata(L, lbind_libbox)) \
+    X( 9, "libmeta_key",  lua_pushlightuserdata(L, lbind_libmeta)) \
+    X(10, "enummeta_key", lua_pushlightuserdata(L, lbind_enummeta)) \
+
     static const char *options[] = {
         "all",
 #define X(a,b,c) b,
@@ -175,7 +151,6 @@ int lbind_getinfo(lua_State *L) {
 #undef TOTAL_OPTIONS
 #undef INFOS
 }
-
 
 /* lbind userdata maintain */
 
