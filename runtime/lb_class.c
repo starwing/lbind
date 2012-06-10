@@ -169,20 +169,16 @@ typedef struct {
 
 static lbC_Object *to_object(lua_State *L, int ud) {
     lbC_Object *obj = (lbC_Object*)lua_touserdata(L, ud);
-    printf("to_object: %d\n", ud);
     if (obj != NULL) {
         if (!check_size(L, ud) || obj->instance == NULL)
             obj = NULL;
         else {
             ud = lua_absindex(L, ud);
             lbind_getpointertable(L); /* 1 */
-            printf("instance: %p\n", obj->instance);
             lua_rawgetp(L, -1, obj->instance); /* 2 */
-            printf("ptrbox: %s\n", luaL_typename(L, -1));
             if (!lua_rawequal(L, ud, -1))
                 obj = NULL;
             lua_pop(L, 2); /* (2)(1) */
-            printf("object: %p\n", (void*)obj);
         }
     }
     return obj;
@@ -261,13 +257,9 @@ static int lbM_newindex(lua_State *L) {
 static int lbM_gc(lua_State *L) {
     lbC_Object *obj = (lbC_Object*)lua_touserdata(L, 1);
     if (obj != NULL && check_size(L, 1)) {
-        printf("gcced: %p\n", obj->instance);
         if ((obj->flags & LBC_GC) != 0) {
-            printf("not gcced yet\n");
             lua_getfield(L, 1, "delete");
-            printf("delete: %s\n", luaL_typename(L, -1));
             if (!lua_isnil(L, -1)) {
-                printf("call delete()\n");
                 lua_pushvalue(L, 1);
                 lua_call(L, 1, 0);
             }
@@ -503,7 +495,6 @@ void *lbC_cast(lua_State *L, int ud, const lbC_Type *t) {
 /* lbind object maintain */
 
 void lbO_register(lua_State *L, const void *p, const lbC_Type *t) {
-    printf("lbO_register: %p\n", p);
     lbind_getpointertable(L); /* 1 */
     lua_rawgetp(L, -1, p); /* 2 */
     if (lua_isnil(L, -1)) {
@@ -512,18 +503,10 @@ void lbO_register(lua_State *L, const void *p, const lbC_Type *t) {
         obj = (lbC_Object*)lua_newuserdata(L, sizeof(lbC_Object)); /* 2 */
         obj->instance = (void*)p;
         obj->flags = t->init_flags;
-        printf("create: %p\n", (void*)obj);
         lbC_getmetatable(L, t); /* 3 */
         lua_setmetatable(L, -2); /* 3->2 */
         lua_pushvalue(L, -1); /* 2->3 */
         lua_rawsetp(L, -3, p); /* 3->1 */
-        lbind_getpointertable(L);
-        lua_rawgetp(L, -1, p);
-        if (!lua_isnil(L, -1)) {
-            lbC_Object *obj = lua_touserdata(L, -1);
-            printf("test ok: %p\n", obj->instance);
-        }
-        lua_pop(L, 2);
     }
     lua_remove(L, -2); /* (1) */
 }
