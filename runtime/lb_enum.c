@@ -11,8 +11,7 @@
                 || *(s) == '\n' || *(s) == ',' || *(s) == '|' \
               ) ++(s); } while (0)
 
-static int parse_ident(lua_State *L, const char *p, int *value)
-{
+static int parse_ident(lua_State *L, const char *p, int *value) {
     if (isalpha(*p) || *p == '_') {
         int valid;
         const char *begin = p++;
@@ -39,8 +38,7 @@ static int parse_ident(lua_State *L, const char *p, int *value)
     }
 }
 
-static int parse_enum(lua_State *L, const char *s, int *penum, int check)
-{
+static int parse_enum(lua_State *L, const char *s, int *penum, int check) {
     *penum = 0;
     while (*s != '\0') {
         int evalue;
@@ -70,18 +68,15 @@ static int parse_enum(lua_State *L, const char *s, int *penum, int check)
 
 /* lbind enum maintain */
 
-int lbE_isenum(lua_State *L, int narg, lbE_EnumType *et)
-{
+int lbE_isenum(lua_State *L, int narg, lbE_EnumType *et) {
     return lua_isnumber(L, narg) || lua_isstring(L, narg);
 }
 
-void lbE_pushenum(lua_State *L, int evalue, lbE_EnumType *et)
-{
+void lbE_pushenum(lua_State *L, int evalue, lbE_EnumType *et) {
     lua_pushinteger(L, evalue);
 }
 
-static int toenum(lua_State *L, int narg, lbE_EnumType *et, int check)
-{
+static int toenum(lua_State *L, int narg, lbE_EnumType *et, int check) {
     const char *str;
     int value = lua_tointeger(L, narg);
     if (value != 0 || lua_isnumber(L, narg))
@@ -106,18 +101,15 @@ static int toenum(lua_State *L, int narg, lbE_EnumType *et, int check)
     return 0;
 }
 
-int lbE_toenum(lua_State *L, int narg, lbE_EnumType *et)
-{
+int lbE_toenum(lua_State *L, int narg, lbE_EnumType *et) {
     return toenum(L, narg, et, 0);
 }
 
-int lbE_checkenum(lua_State *L, int narg, lbE_EnumType *et)
-{
+int lbE_checkenum(lua_State *L, int narg, lbE_EnumType *et) {
     return toenum(L, narg, et, 1);
 }
 
-void lbE_initenum(lua_State *L, const char *name, lbE_Enum *enums, lbE_EnumType *et)
-{
+void lbE_initenum(lua_State *L, const char *name, lbE_Enum *enums, lbE_EnumType *et) {
     /* stack: etable */
     et->name = name;
     et->enums = enums;
@@ -156,8 +148,7 @@ void lbE_initenum(lua_State *L, const char *name, lbE_Enum *enums, lbE_EnumType 
     lua_rawsetp(L, LUA_REGISTRYINDEX, et); /* 1->env */
 }
 
-void lbE_setbitflag(lua_State *L, int isbitflag, lbE_EnumType *et)
-{
+void lbE_setbitflag(lua_State *L, int isbitflag, lbE_EnumType *et) {
     if (isbitflag)
         et->flags |= LBE_BITFIELD;
     else
