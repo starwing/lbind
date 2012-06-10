@@ -30,8 +30,8 @@ int lua_absindex(lua_State *L, int idx) {
 #define lbind_ptrbox    ((void*)0xFB9DBB81)  /* ptrbox */
 #define lbind_typebox   ((void*)0xFBD2927F)  /* typinf */
 #define lbind_libbox    ((void*)0xFB52BB81)  /* libbox */
-#define lbind_libmeta   ((void*)0xFB52B6ED)  /* libmet */
-#define lbind_enummeta  ((void*)0xFBE7E6ED)  /* enumet */
+#define lbind_libmeta   ((void*)0xFB52B6E1)  /* libmex */
+#define lbind_enummeta  ((void*)0xFBE7E6E1)  /* enumex */
 
 static void setnewtable(lua_State *L, const void *p, const char *config) {
     lua_newtable(L); /* 1 */
