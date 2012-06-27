@@ -10,29 +10,10 @@
 #define LBLIB_API   LUALIB_API
 
 
-/* compatible apis */
-#if LUA_VERSION_NUM < 502
-#  define LUA_OK                        0
-#  define lua_getuservalue              lua_getfenv
-#  define lua_setuservalue              lua_setfenv
-#  define lua_rawlen                    lua_objlen
-#  define luaL_setfuncs(L,l,nups)       luaI_openlib((L),NULL,(l),(nups))
-#  define luaL_newlibtable(L,l)	\
-    lua_createtable(L, 0, sizeof(l)/sizeof((l)[0]) - 1)
-#  define luaL_newlib(L,l) \
-    (luaL_newlibtable(L,l), luaL_setfuncs(L,l,0))
-
-LB_API void lua_rawgetp (lua_State *L, int narg, const void *p);
-LB_API void lua_rawsetp (lua_State *L, int narg, const void *p);
-LB_API int  lua_absindex (lua_State *L, int idx);
-
-#endif /* LUA_VERSION_NUM < 502 */
-
-
 /* lbind runtime */
 
-LUALIB_API int lbind_getinfo (lua_State *L);
 LUALIB_API int luaopen_lbind (lua_State *L);
+
 
 /* lbind class register */
 
@@ -43,24 +24,19 @@ typedef struct {
 
 void lbind_register (lua_State *L, lb_Reg *reg);
 
+
 /* lbind error process */
 
 LB_API int lbind_typeerror  (lua_State *L, int narg, const char *tname);
 LB_API int lbind_matcherror (lua_State *L, const char *extramsg);
 
-/* lbind global informations */
-
-LB_API void lbind_getpointertable (lua_State *L);
-LB_API void lbind_gettypemaptable (lua_State *L);
-LB_API void lbind_getlibmaptable  (lua_State *L);
-LB_API void lbind_getlibmeta      (lua_State *L);
-LB_API void lbind_getenummeta     (lua_State *L);
 
 /* lbind pointer registry */
 
 LB_API void lbG_register   (lua_State *L, int ud);
 LB_API void lbG_unregister (lua_State *L, int ud);
 LB_API int  lbG_shouldgc   (lua_State *L, int ud);
+
 
 /* lbind class runtime */
 
@@ -81,6 +57,7 @@ struct lbC_Type {
     lbC_Type **bases;
 };
 
+
 /* lbind type registry */
 LB_API void lbC_inittype    (lua_State *L, const char *tname, lbC_Type **bases, lbC_Type *t);
 LB_API void lbC_setmt       (lua_State *L, lbC_Type *t);
@@ -95,38 +72,30 @@ LB_API void lbC_getmetatable (lua_State *L, const void *t);
       lua_createtable((L), 0, 4), \
       lbC_setmt((L), (t)) )
 
-#define lbC_newclass_meta(L,name,funcs,mt,base,t) \
+#define lbC_newclass_meta(L,name,funcs,base,t) \
     ( lbC_inittype((L),(name),(base),(t)), \
       luaL_newlib((L), funcs), \
-      luaL_newlib((L), mt), \
+      luaL_newlib((L), funcs##_meta), \
       lbC_setmt((L), (t)) )
-
 
 /* lbind type system */
 LB_API const char *lbC_type (lua_State *L, int ud);
 LB_API int         lbC_isa  (lua_State *L, int ud, const lbC_Type *t);
 LB_API void       *lbC_cast (lua_State *L, int ud, const lbC_Type *t);
 
+LB_API const char *lbO_tolstring (lua_State *L, int idx, size_t *plen);
+
 /* lbind object maintain */
 LB_API void  lbO_register    (lua_State *L, const void *p, const lbC_Type *t);
 LB_API void *lbO_unregister  (lua_State *L, int ud);
 LB_API int   lbO_retrieve    (lua_State *L, const void *p);
 LB_API void  lbO_copyobject  (lua_State *L, const void *p, const lbC_Type *t);
-LB_API void *lbO_isobject    (lua_State *L, int ud, const lbC_Type *t);
+LB_API void *lbO_testobject  (lua_State *L, int ud, const lbC_Type *t);
 LB_API void *lbO_checkobject (lua_State *L, int ud, const lbC_Type *t);
 LB_API void *lbO_toobject    (lua_State *L, int ud);
 
-
-/* lbind metatable routine */
-
-#define lbM_basetable   "__bases"
-#define lbM_libtable    "__methods"
-#define lbM_typeinfo    "__typeinfo"
-#define lbM_gettertable "__get"
-#define lbM_settertable "__set"
-
-#define lbM_getfield(L,f) lua_getfield(L,-1,f)
-#define lbM_setfield(L,f) lua_setfield(L,-2,f)
+#define lbO_optobject(L,ud,defs,t) \
+    (lua_isnoneornil((L),(ud)) ? (defs) : lbO_checkobject((L),(ud),(t)))
 
 /* lbind enum runtime */
 
@@ -140,6 +109,7 @@ typedef struct {
     int flags;
     lbE_Enum *enums;
 } lbE_EnumType;
+
 
 LB_API void lbE_initenum (lua_State *L, const char *name, lbE_Enum *enums, lbE_EnumType *et);
 LB_API void lbE_setbitflag (lua_State *L, int isbitfielded, lbE_EnumType *et);
