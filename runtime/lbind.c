@@ -61,7 +61,7 @@ static const char *luaL_tolstring(lua_State *L, int idx, size_t *plen) {
         break;
     }
   }
-  return lua_tolstring(L, -1, len);
+  return lua_tolstring(L, -1, plen);
 }
 
 #endif /* LUA_VERSION_NUM < 502 */
