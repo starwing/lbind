@@ -29,6 +29,15 @@ typedef struct lbind_Base {
 } lbind_Base;
 
 
+/* lbind internal max alignment */
+
+#ifndef LBIND_MAXALIGN
+# define LBIND_MAXALIGN union { double u; void *s; long l; }
+#endif
+
+typedef LBIND_MAXALIGN lbind_MaxAlign;
+
+
 /* lbind runtime */
 
 LUALIB_API int luaopen_lbind (lua_State *L);
@@ -100,6 +109,7 @@ LB_API void       *lbind_cast      (lua_State *L, int ud, const lbind_Type *t);
 #define lbind_tostring(L,idx) lbind_tolstring((L),(idx),NULL)
 
 /* lbind object maintain */
+LB_API void *lbind_new        (lua_State *L, size_t objsize, const lbind_Type *t);
 LB_API void  lbind_register   (lua_State *L, const void *p, const lbind_Type *t);
 LB_API void *lbind_unregister (lua_State *L, int idx);
 LB_API int   lbind_retrieve   (lua_State *L, const void *p);

@@ -194,9 +194,12 @@ static void get_enummeta(lua_State *L) {
 
 /* lbind userdata maintain */
 
-typedef struct {
-    void *instance;
-    int flags;
+typedef union {
+    lbind_MaxAlign dummy; /* ensures maximum alignment for `intern' object */
+    struct {
+        void *instance;
+        int flags;
+    } o;
 } lbind_Object;
 
 #define LBC_GC          0x01
@@ -211,12 +214,12 @@ typedef struct {
 static lbind_Object *to_object(lua_State *L, int ud) {
     lbind_Object *obj = (lbind_Object*)lua_touserdata(L, ud);
     if (obj != NULL) {
-        if (!check_size(L, ud) || obj->instance == NULL)
+        if (!check_size(L, ud) || obj->o.instance == NULL)
             obj = NULL;
         else {
             ud = lua_absindex(L, ud);
             get_pointertable(L); /* 1 */
-            lua_rawgetp(L, -1, obj->instance); /* 2 */
+            lua_rawgetp(L, -1, obj->o.instance); /* 2 */
             if (!lua_rawequal(L, ud, -1))
                 obj = NULL;
             lua_pop(L, 2); /* (2)(1) */
@@ -228,18 +231,18 @@ static lbind_Object *to_object(lua_State *L, int ud) {
 void lbind_track(lua_State *L, int narg) {
     lbind_Object *obj = to_object(L, narg);
     if (obj != NULL)
-        obj->flags |= LBC_GC;
+        obj->o.flags |= LBC_GC;
 }
 
 void lbind_untrack(lua_State *L, int narg) {
     lbind_Object *obj = to_object(L, narg);
     if (obj != NULL)
-        obj->flags &= ~LBC_GC;
+        obj->o.flags &= ~LBC_GC;
 }
 
 int lbind_hastrack(lua_State *L, int narg) {
     lbind_Object *obj = to_object(L, narg);
-    return obj != NULL && (obj->flags & LBC_GC) != 0;
+    return obj != NULL && (obj->o.flags & LBC_GC) != 0;
 }
 
 
@@ -285,7 +288,7 @@ static int newlocal_helper(lua_State *L) {
 static int Lnewindex(lua_State *L) {
     lbind_Object *obj = (lbind_Object*)lua_touserdata(L, 1);
     if (obj != NULL
-            && (obj->flags & LBC_HASSETTER) != 0
+            && (obj->o.flags & LBC_HASSETTER) != 0
             && lua_getmetatable(L, 1)) { /* 1 */
         lua_CFunction setter;
         /* setter table */
@@ -318,13 +321,13 @@ static int Lnewindex(lua_State *L) {
 static int Lgc(lua_State *L) {
     lbind_Object *obj = (lbind_Object*)lua_touserdata(L, 1);
     if (obj != NULL && check_size(L, 1)) {
-        if ((obj->flags & LBC_GC) != 0) {
+        if ((obj->o.flags & LBC_GC) != 0) {
             lua_getfield(L, 1, "delete");
             if (!lua_isnil(L, -1)) {
                 lua_pushvalue(L, 1);
                 lua_call(L, 1, 0);
             }
-            if ((obj->flags & LBC_GC) != 0)
+            if ((obj->o.flags & LBC_GC) != 0)
                 lbind_unregister(L, 1);
         }
     }
@@ -340,7 +343,7 @@ static int Lindex(lua_State *L) {
     int i;
     lbind_Object *obj = (lbind_Object*)lua_touserdata(L, 1);
     if (obj != NULL
-            && (obj->flags & LBC_HASGETTER) != 0
+            && (obj->o.flags & LBC_HASGETTER) != 0
             && lua_getmetatable(L, 1)) { /* 1 */
         lua_CFunction getter;
         /* getter table */
@@ -553,9 +556,9 @@ int lbind_isa(lua_State *L, int narg, const lbind_Type *t) {
 
 void *lbind_cast(lua_State *L, int ud, const lbind_Type *t) {
     lbind_Object *obj = (lbind_Object*)lua_touserdata(L, ud);
-    if (!check_size(L, ud) || obj == NULL || obj->instance == NULL)
+    if (!check_size(L, ud) || obj == NULL || obj->o.instance == NULL)
         return NULL;
-    return testudata(L, ud, t) ? obj->instance : try_cast(L, ud, t);
+    return testudata(L, ud, t) ? obj->o.instance : try_cast(L, ud, t);
 }
 
 
@@ -571,14 +574,28 @@ const char *lbind_tolstring(lua_State *L, int idx, size_t *plen) {
             lua_pop(L, 2); /* (2)(1) */
         }
         if (t != NULL) {
-            if (obj->instance == NULL)
+            if (obj->o.instance == NULL)
                 lua_pushfstring(L, "%s: (null)", t->base.name);
             else
-                lua_pushfstring(L, "%s: %p", t->base.name, obj->instance);
+                lua_pushfstring(L, "%s: %p", t->base.name, obj->o.instance);
             return lua_tolstring(L, -1, plen);
         }
     }
     return luaL_tolstring(L, idx, plen);
+}
+
+void *lbind_new(lua_State *L, size_t objsize, const lbind_Type *t) {
+    lbind_Object *obj;
+    get_pointertable(L); /* 1 */
+    obj = (lbind_Object*)lua_newuserdata(L, sizeof(lbind_Object) + objsize);
+    obj->o.instance = (void*)(obj+1);
+    obj->o.flags = t->base.flags;
+    if (lbind_getmetatable(L, t))
+        lua_setmetatable(L, -2);
+    lua_pushvalue(L, -1);
+    lua_rawsetp(L, -3, obj->o.instance);
+    lua_remove(L, -2); /* (1) */
+    return obj->o.instance;
 }
 
 void lbind_register(lua_State *L, const void *p, const lbind_Type *t) {
@@ -588,8 +605,8 @@ void lbind_register(lua_State *L, const void *p, const lbind_Type *t) {
         lbind_Object *obj;
         lua_pop(L, 1); /* (2) */
         obj = (lbind_Object*)lua_newuserdata(L, sizeof(lbind_Object)); /* 2 */
-        obj->instance = (void*)p;
-        obj->flags = t->base.flags;
+        obj->o.instance = (void*)p;
+        obj->o.flags = t->base.flags;
         if (lbind_getmetatable(L, t)) /* 3 */
             lua_setmetatable(L, -2); /* 3->2 */
         lua_pushvalue(L, -1); /* 2->3 */
@@ -604,9 +621,9 @@ void *lbind_unregister(lua_State *L, int ud) {
     if (obj != NULL) {
         if (!check_size(L, ud))
             return NULL;
-        if ((u = obj->instance) != NULL) {
-            obj->instance = NULL;
-            obj->flags &= ~LBC_GC;
+        if ((u = obj->o.instance) != NULL) {
+            obj->o.instance = NULL;
+            obj->o.flags &= ~LBC_GC;
 #if LUA_VERSION_NUM < 502
             get_pointertable(L); /* 1 */
             lua_pushnil(L); /* 2 */
@@ -654,9 +671,9 @@ void *lbind_check(lua_State *L, int ud, const lbind_Type *t) {
     void *u = NULL;
     if (!check_size(L, ud))
         luaL_argerror(L, ud, "invalid lbind userdata");
-    if (obj != NULL && obj->instance == NULL)
+    if (obj != NULL && obj->o.instance == NULL)
         luaL_argerror(L, ud, "null lbind object");
-    u = testudata(L, ud, t) ? obj->instance : try_cast(L, ud, t);
+    u = testudata(L, ud, t) ? obj->o.instance : try_cast(L, ud, t);
     if (u == NULL)
         lbind_typeerror(L, ud, t->base.name);
     return u;
@@ -664,12 +681,12 @@ void *lbind_check(lua_State *L, int ud, const lbind_Type *t) {
 
 void *lbind_test(lua_State *L, int ud, const lbind_Type *t) {
     lbind_Object *obj = (lbind_Object*)lua_touserdata(L, ud);
-    return testudata(L, ud, t) ? obj->instance : try_cast(L, ud, t);
+    return testudata(L, ud, t) ? obj->o.instance : try_cast(L, ud, t);
 }
 
 void *lbind_isobject(lua_State *L, int ud) {
     lbind_Object *obj = to_object(L, ud);
-    return obj == NULL ? NULL : obj->instance;
+    return obj == NULL ? NULL : obj->o.instance;
 }
 
 
