@@ -5,8 +5,6 @@
 #include <lua.h>
 #include <lauxlib.h>
 
-#define LB_API      LUA_API
-#define LBLIB_API   LUALIB_API
 
 #if LUA_VERSION_NUM < 502
 #  define luaL_newlibtable(L,l)	\
@@ -14,9 +12,16 @@
 #  define luaL_newlib(L,l) \
     (luaL_newlibtable(L,l), luaL_setfuncs(L,l,0))
 
-LUALIB_API void luaL_setfuncs (lua_State *L, luaL_Reg *l, int nup);
+LUALIB_API const char *(luaL_tolstring) (lua_State *L, int idx, size_t *len);
+LUALIB_API void (luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup);
+LUALIB_API void (luaL_traceback) (lua_State *L, lua_State *L1,
+                                  const char *msg, int level);
 
 #endif /* LUA_VERSION_NUM */
+
+
+#define LB_API      LUA_API
+#define LBLIB_API   LUALIB_API
 
 
 /* lbind runtime */
@@ -40,13 +45,25 @@ typedef struct lbind_Reg {
     lua_CFunction  open_func; /* luaopen_ function of library */
 } lbind_Reg;
 
-void lbind_install (lua_State *L, lbind_Reg *reg);
+LB_API void lbind_install     (lua_State *L, lbind_Reg *reg);
+LB_API int  lbind_requiref    (lua_State *L, const char *name, lua_CFunction loader);
+LB_API void lbind_requirelibs (lua_State *L, lbind_Reg *reg);
+LB_API void lbind_requireinto (lua_State *L, const char *prefix, lbind_Reg *reg);
+
+
+/* library metatable */
+
+LB_API int  lbind_newlibmeta    (lua_State *L, int idx);
+LB_API void lbind_setlibgetters (lua_State *L, int idx, luaL_Reg *getters);
+LB_API void lbind_setlibgetter  (lua_State *L, int idx, lua_CFunction getter);
+LB_API void lbind_setlibarrayf  (lua_State *L, int idx, lua_CFunction geti);
 
 
 /* lbind error process */
 
 LB_API int lbind_typeerror  (lua_State *L, int idx, const char *tname);
 LB_API int lbind_matcherror (lua_State *L, const char *extramsg);
+LB_API int lbind_self       (lua_State *L, const void *p, const char *method, int nargs, int *ptraceback);
 
 
 /* lbind class runtime */
@@ -68,16 +85,20 @@ struct lbind_Type {
     lbind_Type **bases;
 };
 
-/* lbind_Type flags */
-LB_API int lbind_setautotrack (lua_State *L, int autotrack, lbind_Type *t);
+/* type informations */
+LB_API int lbind_getmetatable (lua_State *L, const lbind_Type *t);
+LB_API int lbind_getlibtable  (lua_State *L, const lbind_Type *t);
 
 /* lbind type registry */
-LB_API void lbind_inittype    (lua_State *L, const char *name, lbind_Type **bases, lbind_Type *t);
-LB_API void lbind_setmt       (lua_State *L, lbind_Type *t);
-LB_API void lbind_setcast     (lua_State *L, lbind_Cast *cast, lbind_Type *t);
-LB_API void lbind_setaccessor (lua_State *L, luaL_Reg *getters, luaL_Reg *setters, lbind_Type *t);
+LB_API void lbind_inittype     (lua_State *L, const char *name, lbind_Type **bases, lbind_Type *t);
+LB_API void lbind_setmt        (lua_State *L, lbind_Type *t);
+LB_API void lbind_setcast      (lua_State *L, lbind_Cast *cast, lbind_Type *t);
+LB_API int  lbind_setautotrack (lua_State *L, int autotrack, lbind_Type *t);
 
-LB_API int lbind_getmetatable (lua_State *L, const lbind_Type *t);
+/* lbind accessors */
+LB_API void lbind_setaccessor   (lua_State *L, luaL_Reg *getters, luaL_Reg *setters, lbind_Type *t);
+LB_API void lbind_sethashf      (lua_State *L, lua_CFunction getter, lua_CFunction setter, lbind_Type *t);
+LB_API void lbind_setarrayf     (lua_State *L, lua_CFunction geti, lua_CFunction seti, lbind_Type *t);
 
 #define lbind_newclass(L,name,funcs,base,t) \
     ( lbind_inittype((L),(name),(base),(t)), \
