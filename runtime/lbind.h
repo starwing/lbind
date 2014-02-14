@@ -70,6 +70,11 @@ LB_API int lbind_setmetafield (lua_State *L, int idx, const char *field);
 LB_API int lbind_setlibcall   (lua_State *L, const char *method);
 
 
+/* lbind useful macros */
+
+#define lbind_returnself(L) do { lua_settop((L), 1); return 1; } while (0)
+
+
 /* lbind class runtime */
 
 /*
