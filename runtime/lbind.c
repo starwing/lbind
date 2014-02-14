@@ -20,9 +20,9 @@ static int relate_index(int idx, int onstack) {
 #  define lua_setuservalue              lua_setfenv
 #  define lua_rawlen                    lua_objlen
 
-static lua_Number lua_tonumberx(lua_State *L, int idx, int *valid) {
-  lua_Number n;
-  *valid = (n = lua_tonumber(L, idx)) != 0 || lua_isnumber(L, idx);
+static lua_Integer lua_tointegerx(lua_State *L, int idx, int *valid) {
+  lua_Integer n;
+  *valid = (n = lua_tointeger(L, idx)) != 0 || lua_isinteger(L, idx);
   return n;
 }
 
@@ -890,10 +890,10 @@ static const char *skip_ident(const char *s) {
 static int parse_ident(lua_State *L, const char *s, const char *e, int *value) {
   int valid;
   lua_pushlstring(L, s, e-s);
-  *value = lua_tonumberx(L, -1, &valid);
+  *value = lua_tointegerx(L, -1, &valid);
   if (!valid) {
     lua_rawget(L, -2);
-    *value = lua_tonumberx(L, -1, &valid);
+    *value = lua_tointegerx(L, -1, &valid);
   }
   lua_pop(L, 1);
   if (!valid) {
@@ -999,7 +999,7 @@ static int toenum(lua_State *L, int idx, lbind_Enum *et, int mask, int check) {
     else {
       lua_pushvalue(L, relate_index(idx, 1)); /* idx->2 */
       lua_rawget(L, -2); /* 2->2 */
-      success = (value = (int)lua_tonumber(L, -1)) != 0 || lua_isnumber(L, -1);
+      value = lua_tointegerx(L, -1, &success);
       lua_pop(L, 1); /* (2) */
       if (check && !success)
         return luaL_error(L, "'%s' is not valid %s", str, et->name);
@@ -1019,13 +1019,14 @@ int lbind_pushmask(lua_State *L, int evalue, lbind_Enum *et) {
 }
 
 int lbind_pushenum(lua_State *L, const char *name, lbind_Enum *et) {
-  int res;
+  int res, success;
   lua_rawgetp(L, LUA_REGISTRYINDEX, et); /* 1 */
   lua_pushstring(L, name); /* 2 */
   lua_pushvalue(L, -1); /* 2->3 */
   lua_rawget(L, -3); /* 3->3 */
   lua_remove(L, -2); /* (1) */
-  if ((res = (int)lua_tonumber(L, -1)) == 0 && !lua_isnumber(L, -1)) {
+  res = lua_tointegerx(L, -1, &success);
+  if (!success) {
     lua_pop(L, 1); /* (3) */
     return -1;
   }
