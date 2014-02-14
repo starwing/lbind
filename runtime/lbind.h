@@ -6,6 +6,10 @@
 #include <lauxlib.h>
 
 
+#define LBIND_TYPE_SIGN 0x799E519F
+#define LBIND_ENUM_SIGN 0xEF73519F
+
+
 #if LUA_VERSION_NUM < 502
 #  define luaL_newlibtable(L,l)	\
     lua_createtable(L, 0, sizeof(l)/sizeof((l)[0]) - 1)
@@ -51,19 +55,19 @@ LB_API void lbind_requirelibs (lua_State *L, lbind_Reg *reg);
 LB_API void lbind_requireinto (lua_State *L, const char *prefix, lbind_Reg *reg);
 
 
-/* library metatable */
-
-LB_API int  lbind_newlibmeta    (lua_State *L, int idx);
-LB_API void lbind_setlibgetters (lua_State *L, int idx, luaL_Reg *getters);
-LB_API void lbind_setlibgetter  (lua_State *L, int idx, lua_CFunction getter);
-LB_API void lbind_setlibarrayf  (lua_State *L, int idx, lua_CFunction geti);
-
-
 /* lbind error process */
 
 LB_API int lbind_typeerror  (lua_State *L, int idx, const char *tname);
 LB_API int lbind_matcherror (lua_State *L, const char *extramsg);
 LB_API int lbind_self       (lua_State *L, const void *p, const char *method, int nargs, int *ptraceback);
+
+
+/* metatable maintain */
+
+LB_API int lbind_setmetatable (lua_State *L, const void *t);
+LB_API int lbind_getmetatable (lua_State *L, const void *t);
+LB_API int lbind_setmetafield (lua_State *L, int idx, const char *field);
+LB_API int lbind_setlibcall   (lua_State *L, const char *method);
 
 
 /* lbind class runtime */
@@ -79,38 +83,29 @@ typedef struct lbind_Type lbind_Type;
 typedef void *lbind_Cast(lua_State *L, int idx, const lbind_Type *to_type);
 
 struct lbind_Type {
+    unsigned sign;
     const char *name;
     int flags;
     lbind_Cast *cast;
     lbind_Type **bases;
 };
 
-/* type informations */
-LB_API int lbind_getmetatable (lua_State *L, const lbind_Type *t);
-LB_API int lbind_getlibtable  (lua_State *L, const lbind_Type *t);
-
 /* lbind type registry */
-LB_API void lbind_inittype     (lua_State *L, const char *name, lbind_Type **bases, lbind_Type *t);
-LB_API void lbind_setmt        (lua_State *L, lbind_Type *t);
-LB_API void lbind_setcast      (lua_State *L, lbind_Cast *cast, lbind_Type *t);
-LB_API int  lbind_setautotrack (lua_State *L, int autotrack, lbind_Type *t);
+LB_API void lbind_inittype     (lbind_Type *t, const char *name, lbind_Type **bases);
+LB_API void lbind_setcast      (lbind_Type *t, lbind_Cast *cast);
+LB_API int  lbind_setautotrack (lbind_Type *t, int autotrack);
 
-/* lbind accessors */
-LB_API void lbind_setaccessor   (lua_State *L, luaL_Reg *getters, luaL_Reg *setters, lbind_Type *t);
-LB_API void lbind_sethashf      (lua_State *L, lua_CFunction getter, lua_CFunction setter, lbind_Type *t);
-LB_API void lbind_setarrayf     (lua_State *L, lua_CFunction geti, lua_CFunction seti, lbind_Type *t);
+/* lbind type metatable */
+LB_API int  lbind_newmetatable (lua_State *L, const lbind_Type *t, luaL_Reg *libs);
+LB_API void lbind_setaccessors (lua_State *L, lbind_Type **bases);
+LB_API void lbind_setagency    (lua_State *L);
+LB_API void lbind_setarrayf    (lua_State *L, lua_CFunction geti, lua_CFunction seti);
+LB_API void lbind_sethashf     (lua_State *L, lua_CFunction geth, lua_CFunction seth);
+LB_API void lbind_setgetters   (lua_State *L, luaL_Reg *getters);
+LB_API void lbind_setsetters   (lua_State *L, luaL_Reg *getters);
 
-#define lbind_newclass(L,name,funcs,base,t) \
-    ( lbind_inittype((L),(name),(base),(t)), \
-      luaL_newlib((L), funcs), \
-      lua_createtable((L), 0, 4), \
-      lbind_setmt((L), (t)) )
-
-#define lbind_newclass_meta(L,name,funcs,base,t) \
-    ( lbind_inittype((L),(name),(base),(t)), \
-      luaL_newlib((L), funcs), \
-      luaL_newlib((L), funcs##_meta), \
-      lbind_setmt((L), (t)) )
+/* get lbind_Type* from metatable */
+LB_API lbind_Type *lbind_typeobject (lua_State *L, int idx);
 
 /* lbind type system */
 LB_API const char *lbind_tolstring (lua_State *L, int idx, size_t *plen);
@@ -150,16 +145,19 @@ typedef struct lbind_EnumItem {
 } lbind_EnumItem;
 
 typedef struct lbind_Enum {
+    unsigned sign;
     const char *name;
     int lastn;
     lbind_EnumItem *enums;
 } lbind_Enum;
 
 
-LB_API void lbind_initenum  (lua_State *L, const char *name, lbind_EnumItem *enums, lbind_Enum *et);
-LB_API int  lbind_addenum   (lua_State *L, int idx, lbind_Enum *et);
-LB_API int  lbind_addenums  (lua_State *L, lbind_EnumItem *enums, lbind_Enum *et);
+/* lbind enum registry */
+LB_API void lbind_initenum     (lbind_Enum *et, const char *name);
+LB_API int  lbind_newenumtable (lua_State *L, lbind_Enum *et, lbind_EnumItem *enums);
+LB_API int  lbind_addenums     (lua_State *L, lbind_EnumItem *enums, lbind_Enum *et);
 
+/* lbind enum type system */
 LB_API int lbind_pushenum  (lua_State *L, const char *name, lbind_Enum *et);
 LB_API int lbind_testenum  (lua_State *L, int idx, lbind_Enum *et);
 LB_API int lbind_checkenum (lua_State *L, int idx, lbind_Enum *et);
@@ -168,14 +166,8 @@ LB_API int lbind_pushmask  (lua_State *L, int evalue, lbind_Enum *et);
 LB_API int lbind_testmask  (lua_State *L, int idx, lbind_Enum *et);
 LB_API int lbind_checkmask (lua_State *L, int idx, lbind_Enum *et);
 
-LB_API int lbind_getenumtable (lua_State *L, const lbind_Enum *et);
-
 #define lbind_optenum(L,idx,defs,t) \
     (lua_isnoneornil((L),(idx)) ? (defs) : lbind_checkenum((L),(idx),(t)))
-
-#define lbind_newenum(L,name,enums,et) \
-    ( luaL_newlibtable((L), (enums)), \
-      lbind_initenum((L), (name), (enums), (et)) )
 
 
 #endif /* LBIND_H */
