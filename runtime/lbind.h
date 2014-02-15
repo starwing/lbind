@@ -59,6 +59,7 @@ LB_API void lbind_requireinto (lua_State *L, const char *prefix, lbind_Reg *reg)
 
 LB_API int lbind_typeerror  (lua_State *L, int idx, const char *tname);
 LB_API int lbind_matcherror (lua_State *L, const char *extramsg);
+LB_API int lbind_dumpstack  (lua_State *L, const char *extramsg);
 LB_API int lbind_self       (lua_State *L, const void *p, const char *method, int nargs, int *ptraceback);
 
 

@@ -213,6 +213,25 @@ void lbind_requireinto(lua_State *L, const char *prefix, lbind_Reg *libs) {
 
 /* lbind error maintain */
 
+int lbind_dumpstack(lua_State *L, const char *msg) {
+  int i, top = lua_gettop(L);
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  luaL_addstring(&b, "dump stack: ");
+  luaL_addstring(&b, msg);
+  luaL_addstring(&b, "\n---------------------------\n");
+  for (i = 1; i <= top; ++i) {
+    lua_pushfstring(L, "%d: ", i);
+    luaL_addvalue(&b);
+    lbind_tolstring(L, i, NULL);
+    luaL_addvalue(&b);
+    luaL_addstring(&b, "\n");
+  }
+  luaL_addstring(&b, "---------------------------\n");
+  luaL_pushresult(&b);
+  return 1;
+}
+
 int lbind_typeerror(lua_State *L, int idx, const char *tname) {
   const char *real_type = lbind_type(L, idx);
   const char *msg;
@@ -520,6 +539,8 @@ int lbind_newmetatable(lua_State *L, const lbind_Type *t, luaL_Reg *libs) {
   set_default(L, -2, "__gc");
   lua_pushcfunction(L, Ltostring);
   set_default(L, -2, "__tostring");
+  lua_pushvalue(L, -1);
+  set_default(L, -2, "__index");
 
   register_type(L, t->name, (const void*)t);
   return 1;
