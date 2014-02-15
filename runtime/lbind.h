@@ -28,11 +28,6 @@ LUALIB_API void (luaL_traceback) (lua_State *L, lua_State *L1,
 #define LBLIB_API   LUALIB_API
 
 
-/* lbind runtime */
-
-LUALIB_API int luaopen_lbind (lua_State *L);
-
-
 /* lbind internal max alignment */
 
 #ifndef LBIND_MAXALIGN
@@ -40,6 +35,24 @@ LUALIB_API int luaopen_lbind (lua_State *L);
 #endif
 
 typedef LBIND_MAXALIGN lbind_MaxAlign;
+
+
+/* lbind runtime */
+
+LUALIB_API int luaopen_lbind (lua_State *L);
+
+
+/* lbind utils functions */
+
+LB_API int lbind_argferror  (lua_State *L, int idx, const char *fmt, ...);
+LB_API int lbind_typeerror  (lua_State *L, int idx, const char *tname);
+LB_API int lbind_matcherror (lua_State *L, const char *extramsg);
+LB_API int lbind_copystack  (lua_State *from, lua_State *to, int nargs);
+LB_API int lbind_dumpstack  (lua_State *L, const char *extramsg);
+LB_API int lbind_hasfield   (lua_State *L, int idx, const char *field);
+LB_API int lbind_self       (lua_State *L, const void *p, const char *method, int nargs, int *ptraceback);
+
+#define lbind_returnself(L) do { lua_settop((L), 1); return 1; } while (0)
 
 
 /* lbind class install */
@@ -55,25 +68,12 @@ LB_API void lbind_requirelibs (lua_State *L, lbind_Reg *reg);
 LB_API void lbind_requireinto (lua_State *L, const char *prefix, lbind_Reg *reg);
 
 
-/* lbind error process */
-
-LB_API int lbind_typeerror  (lua_State *L, int idx, const char *tname);
-LB_API int lbind_matcherror (lua_State *L, const char *extramsg);
-LB_API int lbind_dumpstack  (lua_State *L, const char *extramsg);
-LB_API int lbind_self       (lua_State *L, const void *p, const char *method, int nargs, int *ptraceback);
-
-
 /* metatable maintain */
 
 LB_API int lbind_setmetatable (lua_State *L, const void *t);
 LB_API int lbind_getmetatable (lua_State *L, const void *t);
 LB_API int lbind_setmetafield (lua_State *L, int idx, const char *field);
 LB_API int lbind_setlibcall   (lua_State *L, const char *method);
-
-
-/* lbind useful macros */
-
-#define lbind_returnself(L) do { lua_settop((L), 1); return 1; } while (0)
 
 
 /* lbind class runtime */
@@ -97,8 +97,8 @@ struct lbind_Type {
 };
 
 /* lbind type registry */
-LB_API void lbind_inittype     (lbind_Type *t, const char *name, lbind_Type **bases);
-LB_API void lbind_setcast      (lbind_Type *t, lbind_Cast *cast);
+LB_API void lbind_inittype     (lbind_Type *t, const char *name);
+LB_API void lbind_setbase      (lbind_Type *t, lbind_Type **bases, lbind_Cast *cast);
 LB_API int  lbind_setautotrack (lbind_Type *t, int autotrack);
 
 /* lbind type metatable */
