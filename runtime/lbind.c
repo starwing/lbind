@@ -248,7 +248,7 @@ int lbind_copystack(lua_State *from, lua_State *to, int n) {
     return n;
 }
 
-int lbind_dumpstack(lua_State *L, const char *msg) {
+const char *lbind_dumpstack(lua_State *L, const char *msg) {
   int i, top = lua_gettop(L);
   luaL_Buffer b;
   luaL_buffinit(L, &b);
@@ -264,7 +264,7 @@ int lbind_dumpstack(lua_State *L, const char *msg) {
   }
   luaL_addstring(&b, "---------------------------\n");
   luaL_pushresult(&b);
-  return 1;
+  return lua_tostring(L, -1);
 }
 
 int lbind_hasfield(lua_State *L, int idx, const char *field) {
@@ -354,6 +354,7 @@ typedef union {
 #define LBC_HASGETTER   0x04
 #define LBC_HASSETI     0x08
 #define LBC_HASGETI     0x10
+#define LBC_HASACCESSOR 0x20
 
 #define check_size(L,n) (lua_rawlen((L),(n)) >= sizeof(lbind_Object))
 
@@ -566,7 +567,7 @@ static int check_type(lua_State *L, const lbind_Type *t) {
   return 1;
 }
 
-int lbind_newmetatable(lua_State *L, const lbind_Type *t, luaL_Reg *libs) {
+int lbind_newmetatable(lua_State *L, luaL_Reg *libs, const lbind_Type *t) {
   if (!check_type(L, t)) return 0;
 
   lua_createtable(L, 0, 8);
@@ -717,12 +718,14 @@ static int Lindex(lua_State *L) {
       if (!lua_isnil(L, -1))
         return 1;
     }
+    lua_settop(L, 2);
     if (lua_getmetatable(L, 1)) { /* 1 */
       int nret;
       lua_pushvalue(L, 2);
       lua_rawget(L, -2);
       if (!lua_isnil(L, -1))
         return 1;
+      lua_settop(L, 3); /* obj key metatable */
       if ((obj->o.flags & LBC_HASGETI) != 0
           && lua_type(L, 2) == LUA_TNUMBER) {
         if ((nret = call_accessor(L, "__geti", 2)) >= 0)
@@ -767,11 +770,20 @@ static void push_indexfunc(lua_State *L, lbind_Type **bases) {
   lua_pushcclosure(L, Lindex, nups);
 }
 
+static void set_accessor(lua_State *L, lbind_Type **bases, lbind_Type *t) {
+  if ((~t->flags & LBC_HASACCESSOR) != 0) {
+    t->bases = bases;
+    push_indexfunc(L, bases);
+    lua_setfield(L, -2, "__index");
+    lua_pushcfunction(L, Lnewindex);
+    lua_setfield(L, -2, "__newindex");
+    t->flags |= LBC_HASACCESSOR;
+  }
+}
+
 void lbind_setaccessors(lua_State *L, lbind_Type **bases) {
-  push_indexfunc(L, bases);
-  lua_setfield(L, -2, "__index");
-  lua_pushcfunction(L, Lnewindex);
-  lua_setfield(L, -2, "__newindex");
+  lbind_Type *t = lbind_typeobject(L, -1);
+  set_accessor(L, bases, t);
 }
 
 void lbind_setarrayf(lua_State *L, lua_CFunction geti, lua_CFunction seti) {
@@ -786,23 +798,25 @@ void lbind_setarrayf(lua_State *L, lua_CFunction geti, lua_CFunction seti) {
     lua_setfield(L, -2, "__seti");
     t->flags |= LBC_HASSETI;
   }
+  set_accessor(L, t->bases, t);
 }
 
-void lbind_sethashf(lua_State *L, lua_CFunction getter, lua_CFunction setter) {
+void lbind_sethashf(lua_State *L, lua_CFunction geth, lua_CFunction seth) {
   lbind_Type *t = lbind_typeobject(L, -1);
-  if (t && getter) {
-    lua_pushcfunction(L, getter);
+  if (t && geth) {
+    lua_pushcfunction(L, geth);
     lua_setfield(L, -2, "__getter");
     t->flags |= LBC_HASGETTER;
   }
-  if (t && setter) {
-    lua_pushcfunction(L, setter);
+  if (t && seth) {
+    lua_pushcfunction(L, seth);
     lua_setfield(L, -2, "__setter");
     t->flags |= LBC_HASSETTER;
   }
+  set_accessor(L, t->bases, t);
 }
 
-void lbind_setgetter(lua_State *L, luaL_Reg *getters) {
+void lbind_setmaptable(lua_State *L, luaL_Reg *getters, luaL_Reg *setters) {
   lbind_Type *t = lbind_typeobject(L, -1);
   if (t && getters) {
     lua_newtable(L);
@@ -810,16 +824,17 @@ void lbind_setgetter(lua_State *L, luaL_Reg *getters) {
     lua_setfield(L, -2, "__getter");
     t->flags |= LBC_HASGETTER;
   }
-}
-
-void lbind_setsetter(lua_State *L, luaL_Reg *setters) {
-  lbind_Type *t = lbind_typeobject(L, -1);
   if (t && setters) {
-    lua_newtable(L);
-    luaL_setfuncs(L, setters, 0);
+    if (setters == getters)
+      lua_getfield(L, -1, "__getter");
+    else {
+      lua_newtable(L);
+      luaL_setfuncs(L, setters, 0);
+    }
     lua_setfield(L, -2, "__setter");
     t->flags |= LBC_HASSETTER;
   }
+  set_accessor(L, t->bases, t);
 }
 
 

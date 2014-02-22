@@ -48,9 +48,10 @@ LB_API int lbind_argferror  (lua_State *L, int idx, const char *fmt, ...);
 LB_API int lbind_typeerror  (lua_State *L, int idx, const char *tname);
 LB_API int lbind_matcherror (lua_State *L, const char *extramsg);
 LB_API int lbind_copystack  (lua_State *from, lua_State *to, int nargs);
-LB_API int lbind_dumpstack  (lua_State *L, const char *extramsg);
 LB_API int lbind_hasfield   (lua_State *L, int idx, const char *field);
 LB_API int lbind_self       (lua_State *L, const void *p, const char *method, int nargs, int *ptraceback);
+
+LB_API const char *lbind_dumpstack (lua_State *L, const char *extramsg);
 
 #define lbind_returnself(L) do { lua_settop((L), 1); return 1; } while (0)
 
@@ -102,13 +103,12 @@ LB_API void lbind_setbase      (lbind_Type *t, lbind_Type **bases, lbind_Cast *c
 LB_API int  lbind_setautotrack (lbind_Type *t, int autotrack);
 
 /* lbind type metatable */
-LB_API int  lbind_newmetatable (lua_State *L, const lbind_Type *t, luaL_Reg *libs);
-LB_API void lbind_setaccessors (lua_State *L, lbind_Type **bases);
+LB_API int  lbind_newmetatable (lua_State *L, luaL_Reg *libs, const lbind_Type *t);
 LB_API void lbind_setagency    (lua_State *L);
+LB_API void lbind_setaccessors (lua_State *L, lbind_Type **bases);
 LB_API void lbind_setarrayf    (lua_State *L, lua_CFunction geti, lua_CFunction seti);
 LB_API void lbind_sethashf     (lua_State *L, lua_CFunction geth, lua_CFunction seth);
-LB_API void lbind_setgetters   (lua_State *L, luaL_Reg *getters);
-LB_API void lbind_setsetters   (lua_State *L, luaL_Reg *getters);
+LB_API void lbind_setmaptable  (lua_State *L, luaL_Reg *getters, luaL_Reg *setters);
 
 /* get lbind_Type* from metatable */
 LB_API lbind_Type *lbind_typeobject (lua_State *L, int idx);
