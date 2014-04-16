@@ -38,8 +38,9 @@ typedef LBIND_MAXALIGN lbind_MaxAlign;
 
 
 /* lbind runtime */
-
+#ifndef LBIND_NO_RUNTIME
 LUALIB_API int luaopen_lbind (lua_State *L);
+#endif /* LBIND_NO_RUNTIME */
 
 
 /* lbind utils functions */
@@ -125,11 +126,12 @@ LB_API void *lbind_test  (lua_State *L, int idx, const lbind_Type *t);
 
 #define lbind_tostring(L,idx) lbind_tolstring((L),(idx),NULL)
 
-/* lbind object maintain */
+/* lbind pointer registry */
 LB_API void *lbind_raw      (lua_State *L, size_t objsize);
 LB_API void *lbind_object   (lua_State *L, int idx);
 LB_API int   lbind_retrieve (lua_State *L, const void *p);
 
+/* lbind object creation */
 LB_API void *lbind_new        (lua_State *L, size_t objsize, const lbind_Type *t);
 LB_API void  lbind_register   (lua_State *L, const void *p, const lbind_Type *t);
 LB_API void *lbind_unregister (lua_State *L, int idx);
@@ -137,13 +139,14 @@ LB_API void *lbind_unregister (lua_State *L, int idx);
 #define lbind_optobject(L,idx,defs,t) \
     (lua_isnoneornil((L),(idx)) ? (defs) : lbind_check((L),(idx),(t)))
 
-/* lbind pointer registry */
+/* lbind gc track */
 LB_API void lbind_track    (lua_State *L, int idx);
 LB_API void lbind_untrack  (lua_State *L, int idx);
 LB_API int  lbind_hastrack (lua_State *L, int idx);
 
 
 /* lbind enum runtime */
+#ifndef LBIND_NO_ENUM
 
 typedef struct lbind_EnumItem {
     const char *name;
@@ -174,6 +177,8 @@ LB_API int lbind_checkmask (lua_State *L, int idx, lbind_Enum *et);
 
 #define lbind_optenum(L,idx,defs,t) \
     (lua_isnoneornil((L),(idx)) ? (defs) : lbind_checkenum((L),(idx),(t)))
+
+#endif /* LBIND_NO_ENUM */
 
 
 #endif /* LBIND_H */
