@@ -9,6 +9,9 @@
 #define LBIND_TYPE_SIGN 0x799E519F
 #define LBIND_ENUM_SIGN 0xEF73519F
 
+#define LBIND_INDEX     0x01
+#define LBIND_NEWINDEX  0x02
+
 
 #if LUA_VERSION_NUM < 502
 #  define luaL_newlibtable(L,l)	\
@@ -29,7 +32,6 @@ LUALIB_API void (luaL_traceback) (lua_State *L, lua_State *L1,
 
 
 /* lbind internal max alignment */
-
 #ifndef LBIND_MAXALIGN
 # define LBIND_MAXALIGN union { double u; void *s; long l; }
 #endif
@@ -44,7 +46,6 @@ LUALIB_API int luaopen_lbind (lua_State *L);
 
 
 /* lbind utils functions */
-
 LB_API int lbind_argferror  (lua_State *L, int idx, const char *fmt, ...);
 LB_API int lbind_typeerror  (lua_State *L, int idx, const char *tname);
 LB_API int lbind_matcherror (lua_State *L, const char *extramsg);
@@ -58,7 +59,6 @@ LB_API const char *lbind_dumpstack (lua_State *L, const char *extramsg);
 
 
 /* lbind class install */
-
 typedef struct lbind_Reg {
     const char    *name; /* name of library */
     lua_CFunction  open_func; /* luaopen_ function of library */
@@ -71,11 +71,16 @@ LB_API void lbind_requireinto (lua_State *L, const char *prefix, lbind_Reg *reg)
 
 
 /* metatable maintain */
-
 LB_API int lbind_setmetatable (lua_State *L, const void *t);
 LB_API int lbind_getmetatable (lua_State *L, const void *t);
 LB_API int lbind_setmetafield (lua_State *L, int idx, const char *field);
 LB_API int lbind_setlibcall   (lua_State *L, const char *method);
+
+LB_API void lbind_indexf      (lua_State *L, int ntables);
+LB_API void lbind_newindexf   (lua_State *L);
+LB_API void lbind_setarrayf   (lua_State *L, lua_CFunction f, int field);
+LB_API void lbind_sethashf    (lua_State *L, lua_CFunction f, int field);
+LB_API void lbind_setmaptable (lua_State *L, luaL_Reg libs[], int field);
 
 
 /* lbind class runtime */
@@ -98,6 +103,13 @@ struct lbind_Type {
     lbind_Type **bases;
 };
 
+#define LBIND_GC        0x01
+#define LBIND_INTENT    0x02
+#define LBIND_DEFFLAG   (LBIND_GC|LBIND_INTENT)
+
+#define LBIND_INIT(name) { LBIND_TYPE_SIGN, name, LBIND_DEFFLAG, NULL, NULL }
+#define LBIND_TYPE(var, name) LB_API lbind_Type var = LBIND_INIT(name)
+
 /* lbind type registry */
 LB_API void lbind_inittype     (lbind_Type *t, const char *name);
 LB_API void lbind_setbase      (lbind_Type *t, lbind_Type **bases, lbind_Cast *cast);
@@ -106,10 +118,6 @@ LB_API int  lbind_setautotrack (lbind_Type *t, int autotrack);
 /* lbind type metatable */
 LB_API int  lbind_newmetatable (lua_State *L, luaL_Reg *libs, const lbind_Type *t);
 LB_API void lbind_setagency    (lua_State *L);
-LB_API void lbind_setaccessors (lua_State *L, lbind_Type **bases);
-LB_API void lbind_setarrayf    (lua_State *L, lua_CFunction geti, lua_CFunction seti);
-LB_API void lbind_sethashf     (lua_State *L, lua_CFunction geth, lua_CFunction seth);
-LB_API void lbind_setmaptable  (lua_State *L, luaL_Reg *getters, luaL_Reg *setters);
 
 /* get lbind_Type* from metatable */
 LB_API lbind_Type *lbind_typeobject (lua_State *L, int idx);
