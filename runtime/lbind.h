@@ -169,19 +169,13 @@ typedef struct lbind_Enum {
     lbind_EnumItem *items;
 } lbind_Enum;
 
-#define LBIND_INITENUM(name) { name, 0, NULL }
-#define LBIND_ENUM(var, name) LB_API lbind_Enum var = LBIND_INITENUM(name)
+#define LBIND_INITENUM(name, es) { name, sizeof(es)/sizeof((es)[0]), es }
+#define LBIND_ENUM(var, name, es) LB_API lbind_Enum var = LBIND_INITENUM(name, es)
 
-#define lbind_setenums(et,es) do { \
-    (et)->items = es;              \
-    (et)->nitem = sizeof(es)/sizeof((es)[0]); } while (0)
-
-/* lbind enum registry */
 LB_API void lbind_initenum (lbind_Enum *et, const char *name);
 
 LB_API lbind_EnumItem *lbind_findenum (lbind_Enum *et, const char *s, size_t len);
 
-/* lbind enum type system */
 LB_API int lbind_pushenum  (lua_State *L, const char *name, lbind_Enum *et);
 LB_API int lbind_testenum  (lua_State *L, int idx, lbind_Enum *et);
 LB_API int lbind_checkenum (lua_State *L, int idx, lbind_Enum *et);

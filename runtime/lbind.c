@@ -1029,8 +1029,8 @@ void lbind_initenum(lbind_Enum *et, const char *name) {
   et->items = NULL;
 }
 
-lbind_EnumItem *lbind_findenum (lbind_Enum *et, const char *s, size_t len) {
-  size_t b = 0, e = et->nitem;
+lbind_EnumItem *lbind_findenum(lbind_Enum *et, const char *s, size_t len) {
+  size_t b = 0, e = et->nitem-1;
   while (b < e) {
     size_t mid = (b + e) >> 1;
     int res = nocase_strncmp(et->items[mid].name, s, len);
