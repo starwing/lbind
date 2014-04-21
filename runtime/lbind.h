@@ -6,13 +6,6 @@
 #include <lauxlib.h>
 
 
-#define LBIND_TYPE_SIGN 0x799E519F
-#define LBIND_ENUM_SIGN 0xEF73519F
-
-#define LBIND_INDEX     0x01
-#define LBIND_NEWINDEX  0x02
-
-
 #if LUA_VERSION_NUM < 502
 #  define luaL_newlibtable(L,l)	\
     lua_createtable(L, 0, sizeof(l)/sizeof((l)[0]) - 1)
@@ -76,6 +69,9 @@ LB_API int lbind_getmetatable (lua_State *L, const void *t);
 LB_API int lbind_setmetafield (lua_State *L, int idx, const char *field);
 LB_API int lbind_setlibcall   (lua_State *L, const char *method);
 
+#define LBIND_INDEX     0x01
+#define LBIND_NEWINDEX  0x02
+
 LB_API void lbind_indexf      (lua_State *L, int ntables);
 LB_API void lbind_newindexf   (lua_State *L);
 LB_API void lbind_setarrayf   (lua_State *L, lua_CFunction f, int field);
@@ -96,7 +92,6 @@ typedef struct lbind_Type lbind_Type;
 typedef void *lbind_Cast(lua_State *L, int idx, const lbind_Type *to_type);
 
 struct lbind_Type {
-    unsigned sign;
     const char *name;
     int flags;
     lbind_Cast *cast;
@@ -107,7 +102,7 @@ struct lbind_Type {
 #define LBIND_INTENT    0x02
 #define LBIND_DEFFLAG   (LBIND_GC|LBIND_INTENT)
 
-#define LBIND_INIT(name) { LBIND_TYPE_SIGN, name, LBIND_DEFFLAG, NULL, NULL }
+#define LBIND_INIT(name) { name, LBIND_DEFFLAG, NULL, NULL }
 #define LBIND_TYPE(var, name) LB_API lbind_Type var = LBIND_INIT(name)
 
 /* lbind type registry */
@@ -162,12 +157,13 @@ typedef struct lbind_EnumItem {
 } lbind_EnumItem;
 
 typedef struct lbind_Enum {
-    unsigned sign;
     const char *name;
     int lastn;
     lbind_EnumItem *enums;
 } lbind_Enum;
 
+#define LBIND_INITENUM(name) { name, 0, NULL }
+#define LBIND_ENUM(var, name) LB_API lbind_Enum var = LBIND_INITENUM(name)
 
 /* lbind enum registry */
 LB_API void lbind_initenum     (lbind_Enum *et, const char *name);
