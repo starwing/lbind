@@ -103,38 +103,31 @@ void luaL_traceback(lua_State *L, lua_State *L1, const char *msg, int level) {
 
 /* lbind information hash routine */
 
-#define LBIND_POINTERBOX 0x1B9DBB81
-#define LBIND_TYPEBOX    0x1BD29B81
+#define LBIND_POINTERBOX 0x90127B07
+#define LBIND_TYPEBOX    0x799E0B07
+#define LBIND_UDBOX      0xED000B07
 
-static void get_pointerbox(lua_State *L) {
-  lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)LBIND_POINTERBOX);
+static int get_box(lua_State *L, unsigned id) {
+  lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)id);
   if (lua_isnil(L, -1)) {
     lua_pop(L, 1);
     lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_rawsetp(L, LUA_REGISTRYINDEX, (void*)id);
+    return 1;
+  }
+  return 0;
+}
+
+static void get_pointerbox(lua_State *L) {
+  if (get_box(L, LBIND_POINTERBOX)) {
     lua_pushliteral(L, "v");
-    lbind_setmetafield(L, -2, "__index");
-	lua_pushvalue(L, -1);
-    lua_rawsetp(L, LUA_REGISTRYINDEX, (void*)LBIND_POINTERBOX);
+    lbind_setmetafield(L, -2, "__mode");
   }
 }
 
 static void get_typebox(lua_State *L) {
-  lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)LBIND_TYPEBOX);
-  if (lua_isnil(L, -1)) {
-    lua_pop(L, 1);
-    lua_newtable(L);
-	lua_pushvalue(L, -1);
-    lua_rawsetp(L, LUA_REGISTRYINDEX, (void*)LBIND_TYPEBOX);
-  }
-}
-
-static const char *get_typestring(lua_State *L, const void *t) {
-  const char *type;
-  get_typebox(L);
-  lua_rawgetp(L, -1, t);
-  type = lua_tostring(L, -1);
-  lua_pop(L, 2);
-  return type;
+  get_box(L, LBIND_TYPEBOX);
 }
 
 
@@ -542,6 +535,36 @@ void lbind_setmaptable(lua_State *L, luaL_Reg libs[], int field) {
 }
 
 
+/* light userdata utils */
+int lbind_getudtypebox(lua_State *L) {
+  return get_box(L, LBIND_UDBOX);
+}
+
+void lbind_pushlightuserdata(lua_State *L, const void *p, int type_id) {
+  lua_pushlightuserdata(L, (void*)p);
+  lbind_getudtypebox(L);
+  lua_pushinteger(L, type_id);
+  lua_rawsetp(L, -2, p);
+  lua_pop(L, 1);
+}
+
+int lbind_getudtypeid(lua_State *L, const void *p) {
+  int type_id;
+  lbind_getudtypebox(L);
+  lua_rawgetp(L, -2, p);
+  type_id = lua_isnil(L, -1) ? -1 : lua_tointeger(L, -1);
+  lua_pop(L, 2);
+  return type_id;
+}
+
+void lbind_deludtypeid(lua_State *L, const void *p) {
+  lbind_getudtypebox(L);
+  lua_pushnil(L);
+  lua_rawsetp(L, -2, p);
+  lua_pop(L, 1);
+}
+
+
 /* lbind userdata maintain */
 
 typedef union {
@@ -728,19 +751,19 @@ static int Lgc(lua_State *L) {
   return 0;
 }
 
-static void register_type(lua_State *L, const char *name, const char *type, const void *t) {
+static void register_type(lua_State *L, const char *name, const void *t) {
   /* stack: metatable */
   lua_pushvalue(L, -1);
   lua_setfield(L, LUA_REGISTRYINDEX, name);
   lua_pushvalue(L, -1);
   lua_rawsetp(L, LUA_REGISTRYINDEX, t);
 
-  get_typebox(L); /* 1 */
+  get_typebox(L);
   lua_pushvalue(L, -2);
   lua_setfield(L, -2, name);
-  lua_pushstring(L, type);
+  lua_pushvalue(L, -2);
   lua_rawsetp(L, -2, t);
-  lua_pop(L, 1); /* (1) */
+  lua_pop(L, 1);
 }
 
 static int type_exists(lua_State *L, const lbind_Type *t) {
@@ -800,7 +823,7 @@ int lbind_newmetatable(lua_State *L, luaL_Reg *libs, const lbind_Type *t) {
     lua_setfield(L, -2, "__index");
   }
 
-  register_type(L, t->name, "type", (const void*)t);
+  register_type(L, t->name, (const void*)t);
   return 1;
 }
 
@@ -932,9 +955,8 @@ void *lbind_test(lua_State *L, int idx, const lbind_Type *t) {
 }
 
 
+/* lbind enum/mask support */
 #ifndef LBIND_NO_ENUM
-/* parse string enumerate value */
-
 static const char *mask = 
   "         ss  s                  "
   "s           s    wwwwwwwwww     "
@@ -955,29 +977,9 @@ static const char *skip_ident(const char *s) {
   return s;
 }
 
-static int parse_ident(lua_State *L, const char *s, const char *e, int *value) {
-  int valid;
-  lua_pushlstring(L, s, e-s);
-  *value = lua_tointegerx(L, -1, &valid);
-  if (!valid) {
-    lua_rawget(L, -2);
-    *value = lua_tointegerx(L, -1, &valid);
-  }
-  lua_pop(L, 1);
-  if (!valid) {
-    lua_pushlstring(L, s, e - s);
-    lua_pushfstring(L, "unexpected ident " LUA_QS " in enum",
-        lua_tostring(L, -1));
-    lua_remove(L, -2);
-    return 0;
-  }
-  return 1;
-}
-
-static int parse_mask(lua_State *L, const char *s, int *penum, int check) {
+static int parse_mask(lbind_Enum *et, const char *s, int *penum, lua_State *L) {
   *penum = 0;
   while (*s != '\0') {
-    int evalue;
     int inversion = 0;
     s = skip_white(s);
     if (*s == '~') {
@@ -986,95 +988,79 @@ static int parse_mask(lua_State *L, const char *s, int *penum, int check) {
       s = skip_white(s);
     }
     if (*s != '\0') {
+      lbind_EnumItem *item;
       const char *e = skip_ident(s);
-      if (e == s)
-        lua_pushfstring(L, "unexpected token '%c' in enum", *s);
-      if (!parse_ident(L, s, e, &evalue)) {
-        if (!check) {
-          lua_pop(L, 1);
-          return 0;
+      if (e == s || (item = lbind_findenum(et, s, e-s)) == NULL) {
+        if (L == NULL) return 0;
+        if (e == s)
+          return luaL_error(L, "unexpected token '%c'", *s);
+        else {
+          lua_pushlstring(L, s, e-s);
+          return luaL_error(L, "unexpected name '%s'", lua_tostring(L, -1));
         }
-        else return lua_error(L);
       }
       if (inversion)
-        *penum &= ~evalue;
+        *penum &= ~item->value;
       else
-        *penum |= evalue;
+        *penum |= item->value;
     }
   }
   return 1;
 }
 
-
-/* lbind enum registry */
-
-static void add_enums(lua_State *L, lbind_Enum *et, lbind_EnumItem enums[]) {
-  /* stack: enumtable */
-  for (; enums->name != NULL; ++enums) {
-    lua_pushstring(L, enums->name); /* 1 */
-    lua_pushinteger(L, enums->value); /* 2 */
-    lua_rawset(L, -3); /* 1,2->etable */
-    if (et->lastn < enums->value)
-      et->lastn = enums->value;
-  }
+static int to_lower(int ch) {
+  return ch >= 'A' && ch <= 'Z' ? ch + 0x20 : ch;
 }
 
-static int Lenumcall(lua_State *L) {
-  lbind_Enum *t = (lbind_Enum*)lbind_typeobject(L, 1);
-  if (*get_typestring(L, t) != 'e')
-    return lbind_typeerror(L, 1, "enum");
-  lua_pushinteger(L, lbind_checkmask(L, 2, t));
-  return 1;
+static int nocase_strncmp(const char *a, const char *b, size_t len) {
+  size_t i;
+  for (i = 0; i < len; ++i, ++a, ++b) {
+    if (*a != *b && to_lower(*a) != to_lower(*b))
+      return *a - *b;
+    if (*a == '\0')
+      return *b == '\0' ? 0 : -1;
+  }
+  return *a != '\0' ? 1 : 0;
 }
 
 void lbind_initenum(lbind_Enum *et, const char *name) {
   et->name = name;
-  et->lastn = 0;
-  et->enums = NULL;
+  et->nitem = 0;
+  et->items = NULL;
 }
 
-int lbind_newenumtable(lua_State *L, lbind_Enum *et, lbind_EnumItem *enums) {
-  if (type_exists(L, (lbind_Type*)et)) return 0;
-  et->enums = enums;
-  lua_createtable(L, 0, 8);
-  add_enums(L, et, enums);
-  lua_pushcfunction(L, Lenumcall);
-  lbind_setmetafield(L, -2, "__call");
-  register_type(L, et->name, "enum", (const void*)et);
-  return 1;
+lbind_EnumItem *lbind_findenum (lbind_Enum *et, const char *s, size_t len) {
+  size_t b = 0, e = et->nitem;
+  while (b < e) {
+    size_t mid = (b + e) >> 1;
+    int res = nocase_strncmp(et->items[mid].name, s, len);
+    if (res == 0)
+      return &et->items[mid];
+    else if (res < 0)
+      b = mid + 1;
+    else
+      e = mid;
+  }
+  return NULL;
 }
-
-int lbind_addenums(lua_State *L, lbind_EnumItem *enums, lbind_Enum *et) {
-  lua_rawgetp(L, LUA_REGISTRYINDEX, et);
-  add_enums(L, et, enums);
-  lua_pop(L, 1);
-  return et->lastn;
-}
-
-
-/* lbind enum type system */
 
 static int toenum(lua_State *L, int idx, lbind_Enum *et, int mask, int check) {
-  const char *str;
-  int value = lua_tointeger(L, idx);
-  if (value != 0 || lua_isnumber(L, idx))
-    return value;
-  if ((str = lua_tostring(L, idx)) != NULL) {
-    int success;
-    lua_rawgetp(L, LUA_REGISTRYINDEX, et); /* 1 */
-    if (mask)
-      success = parse_mask(L, str, &value, check);
-    else {
-      lua_pushvalue(L, relate_index(idx, 1)); /* idx->2 */
-      lua_rawget(L, -2); /* 2->2 */
-      value = lua_tointegerx(L, -1, &success);
-      lua_pop(L, 1); /* (2) */
-      if (check && !success)
-        return luaL_error(L, "'%s' is not valid %s", str, et->name);
+  int type = lua_type(L, idx);
+  if (type == LUA_TNUMBER)
+    return lua_tointeger(L, idx);
+  else if (type == LUA_TSTRING) {
+    size_t len;
+    const char *s = lua_tolstring(L, idx, &len);
+    int value;
+    if (!mask) {
+      lbind_EnumItem *item = lbind_findenum(et, s, len);
+      if (item == NULL && check)
+        return luaL_error(L, "invalid %s value: %s", et->name, s);
+      if (item != NULL)
+        return item->value;
     }
-    lua_pop(L, 1); /* (1) */
-    if (success)
-      return value;
+    else if (parse_mask(et, s, &value, check ? L : NULL))
+        return value;
   }
   if (check)
     lbind_typeerror(L, idx, et->name);
@@ -1082,24 +1068,35 @@ static int toenum(lua_State *L, int idx, lbind_Enum *et, int mask, int check) {
 }
 
 int lbind_pushmask(lua_State *L, int evalue, lbind_Enum *et) {
-  lua_pushinteger(L, evalue);
-  return evalue;
+  luaL_Buffer b;
+  lbind_EnumItem *items;
+  int first = 1;
+  unsigned value = lbind_checkmask(L, 2, et);
+  if (et->items == NULL) {
+    lua_pushliteral(L, "");
+    return 0;
+  }
+  luaL_buffinit(L, &b);
+  for (items = et->items; items->name != NULL; ++items) {
+    if ((items->value & value) == value) {
+      if (first)
+        first = 0;
+      else
+        luaL_addchar(&b, ' ');
+      luaL_addstring(&b, items->name);
+      value &= ~items->value;
+    }
+  }
+  luaL_pushresult(&b);
+  return 1;
 }
 
 int lbind_pushenum(lua_State *L, const char *name, lbind_Enum *et) {
-  int res, success;
-  lua_rawgetp(L, LUA_REGISTRYINDEX, et); /* 1 */
-  lua_pushstring(L, name); /* 2 */
-  lua_pushvalue(L, -1); /* 2->3 */
-  lua_rawget(L, -3); /* 3->3 */
-  lua_remove(L, -2); /* (1) */
-  res = lua_tointegerx(L, -1, &success);
-  if (!success) {
-    lua_pop(L, 1); /* (3) */
+  lbind_EnumItem *item = lbind_findenum(et, name, -1);
+  if (item == NULL)
     return -1;
-  }
-  lua_remove(L, -2); /* (2) */
-  return res;
+  lua_pushinteger(L, item->value);
+  return item->value;
 }
 
 int lbind_testmask(lua_State *L, int idx, lbind_Enum *et) {
@@ -1120,15 +1117,15 @@ int lbind_checkenum(lua_State *L, int idx, lbind_Enum *et) {
 #endif /* LBIND_NO_ENUM */
 
 
-#ifndef LBIND_NO_RUNTIME
 /* lbind Lua side runtime */
-
+#ifndef LBIND_NO_RUNTIME
 static lbind_Type *test_type(lua_State *L, int idx) {
   lbind_Type *t = (lbind_Type*)lua_touserdata(L, idx);
-  const char *type = get_typestring(L, t);
-  if (t == NULL || type == NULL)
-    return lbind_typeobject(L, -1);
-  return t;
+  get_typebox(L);
+  lua_rawgetp(L, -1, t);
+  t = lua_touserdata(L, -1);
+  lua_pop(L, 2);
+  return t != NULL ? t : lbind_typeobject(L, -1);
 }
 
 static int Lregister(lua_State *L) {
@@ -1228,8 +1225,7 @@ static int Ltype(lua_State *L) {
     return 1;
   }
   lua_pushstring(L, t->name);
-  lua_pushstring(L, get_typestring(L, t));
-  return 2;
+  return 1;
 }
 
 static int Lbases(lua_State *L) {
@@ -1253,33 +1249,6 @@ static int Lbases(lua_State *L) {
   return 1;
 }
 
-static int Lmask(lua_State *L) {
-  luaL_Buffer b;
-  lbind_Enum *et = (lbind_Enum*)test_type(L, 1);
-  lbind_EnumItem *ei;
-  int first = 1;
-  unsigned value = lbind_checkmask(L, 2, et);
-  if (et == NULL || *get_typestring(L, et) != 'e')
-    lbind_typeerror(L, 1, "enum");
-  if (et->enums == NULL) {
-    lua_pushliteral(L, "");
-    return 0;
-  }
-  luaL_buffinit(L, &b);
-  for (ei = et->enums; ei->name != NULL; ++ei) {
-    if ((ei->value & value) == value) {
-      if (first)
-        first = 0;
-      else
-        luaL_addchar(&b, ' ');
-      luaL_addstring(&b, ei->name);
-      value &= ~ei->value;
-    }
-  }
-  luaL_pushresult(&b);
-  return 1;
-}
-
 int luaopen_lbind(lua_State *L) {
   luaL_Reg libs[] = {
 #define ENTRY(name) { #name, L##name }
@@ -1288,7 +1257,6 @@ int luaopen_lbind(lua_State *L) {
     ENTRY(delete),
     ENTRY(info),
     ENTRY(isa),
-    ENTRY(mask),
     ENTRY(null),
     ENTRY(owner),
     ENTRY(register),

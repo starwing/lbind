@@ -79,6 +79,13 @@ LB_API void lbind_sethashf    (lua_State *L, lua_CFunction f, int field);
 LB_API void lbind_setmaptable (lua_State *L, luaL_Reg libs[], int field);
 
 
+/* light userdata utils */
+LB_API void lbind_pushlightuserdata (lua_State *L, const void *p, int type_id);
+LB_API int  lbind_getudtypebox (lua_State *L);
+LB_API int  lbind_getudtypeid  (lua_State *L, const void *p);
+LB_API void lbind_deludtypeid  (lua_State *L, const void *p);
+
+
 /* lbind class runtime */
 
 /*
@@ -158,17 +165,21 @@ typedef struct lbind_EnumItem {
 
 typedef struct lbind_Enum {
     const char *name;
-    int lastn;
-    lbind_EnumItem *enums;
+    size_t nitem;
+    lbind_EnumItem *items;
 } lbind_Enum;
 
 #define LBIND_INITENUM(name) { name, 0, NULL }
 #define LBIND_ENUM(var, name) LB_API lbind_Enum var = LBIND_INITENUM(name)
 
+#define lbind_setenums(et,es) do { \
+    (et)->items = es;              \
+    (et)->nitem = sizeof(es)/sizeof((es)[0]); } while (0)
+
 /* lbind enum registry */
-LB_API void lbind_initenum     (lbind_Enum *et, const char *name);
-LB_API int  lbind_newenumtable (lua_State *L, lbind_Enum *et, lbind_EnumItem *enums);
-LB_API int  lbind_addenums     (lua_State *L, lbind_EnumItem *enums, lbind_Enum *et);
+LB_API void lbind_initenum (lbind_Enum *et, const char *name);
+
+LB_API lbind_EnumItem *lbind_findenum (lbind_Enum *et, const char *s, size_t len);
 
 /* lbind enum type system */
 LB_API int lbind_pushenum  (lua_State *L, const char *name, lbind_Enum *et);
