@@ -7,16 +7,23 @@
 
 
 #if LUA_VERSION_NUM < 502
+#  define LUA_OK                        0
+#  define lua_getuservalue              lua_getfenv
+#  define lua_setuservalue              lua_setfenv
+#  define lua_rawlen                    lua_objlen
+
 #  define luaL_newlibtable(L,l)	\
     lua_createtable(L, 0, sizeof(l)/sizeof((l)[0]) - 1)
 #  define luaL_newlib(L,l) \
     (luaL_newlibtable(L,l), luaL_setfuncs(L,l,0))
 
+LUA_API lua_Integer (lua_tointegerx) (lua_State *L, int idx, int *valid);
+LUA_API void (lua_rawsetp) (lua_State *L, int idx, const void *p);
+LUA_API void (lua_rawgetp) (lua_State *L, int idx, const void *p);
 LUALIB_API const char *(luaL_tolstring) (lua_State *L, int idx, size_t *len);
 LUALIB_API void (luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup);
 LUALIB_API void (luaL_traceback) (lua_State *L, lua_State *L1,
                                   const char *msg, int level);
-
 #endif /* LUA_VERSION_NUM */
 
 
@@ -39,6 +46,7 @@ LUALIB_API int luaopen_lbind (lua_State *L);
 
 
 /* lbind utils functions */
+LB_API int lbind_relindex   (int idx, int onstack);
 LB_API int lbind_argferror  (lua_State *L, int idx, const char *fmt, ...);
 LB_API int lbind_typeerror  (lua_State *L, int idx, const char *tname);
 LB_API int lbind_matcherror (lua_State *L, const char *extramsg);
@@ -129,7 +137,7 @@ LB_API const char *lbind_tolstring (lua_State *L, int idx, size_t *plen);
 LB_API const char *lbind_type      (lua_State *L, int idx);
 
 LB_API int   lbind_isa   (lua_State *L, int idx, const lbind_Type *t);
-LB_API void  lbind_copy  (lua_State *L, const void *p, const lbind_Type *t);
+LB_API int   lbind_copy  (lua_State *L, const void *p, const lbind_Type *t);
 LB_API void *lbind_cast  (lua_State *L, int idx, const lbind_Type *t);
 LB_API void *lbind_check (lua_State *L, int idx, const lbind_Type *t);
 LB_API void *lbind_test  (lua_State *L, int idx, const lbind_Type *t);

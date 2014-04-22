@@ -7,34 +7,23 @@
 #include <string.h>
 
 
-static int relate_index(int idx, int onstack) {
-  return (idx > 0 || idx <= LUA_REGISTRYINDEX)
-    ? idx
-    : idx - onstack;
-}
-
 /* compatible apis */
 #if LUA_VERSION_NUM < 502
-#  define LUA_OK                        0
-#  define lua_getuservalue              lua_getfenv
-#  define lua_setuservalue              lua_setfenv
-#  define lua_rawlen                    lua_objlen
-
-static lua_Integer lua_tointegerx(lua_State *L, int idx, int *valid) {
+lua_Integer lua_tointegerx(lua_State *L, int idx, int *valid) {
   lua_Integer n;
   *valid = (n = lua_tointeger(L, idx)) != 0 || lua_isnumber(L, idx);
   return n;
 }
 
-static void lua_rawgetp(lua_State *L, int idx, const void *p) {
+void lua_rawgetp(lua_State *L, int idx, const void *p) {
   lua_pushlightuserdata(L, (void*)p);
-  lua_rawget(L, relate_index(idx, 1));
+  lua_rawget(L, lbind_relindex(idx, 1));
 }
 
-static void lua_rawsetp(lua_State *L, int idx, const void *p) {
+void lua_rawsetp(lua_State *L, int idx, const void *p) {
   lua_pushlightuserdata(L, (void*)p);
   lua_insert(L, -2);
-  lua_rawset(L, relate_index(idx, 1));
+  lua_rawset(L, lbind_relindex(idx, 1));
 }
 
 void luaL_setfuncs(lua_State *L, luaL_Reg *l, int nup) {
@@ -97,7 +86,6 @@ void luaL_traceback(lua_State *L, lua_State *L1, const char *msg, int level) {
   }
   lua_concat(L, lua_gettop(L) - top);
 }
-
 #endif /* LUA_VERSION_NUM < 502 */
 
 
@@ -105,7 +93,7 @@ void luaL_traceback(lua_State *L, lua_State *L1, const char *msg, int level) {
 
 #define LBIND_POINTERBOX 0x90127B07
 #define LBIND_TYPEBOX    0x799E0B07
-#define LBIND_UDBOX      0xED000B07
+#define LBIND_UDBOX      0xC5E7DB07
 
 static int get_box(lua_State *L, unsigned id) {
   lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)id);
@@ -218,6 +206,12 @@ void lbind_requireinto(lua_State *L, const char *prefix, lbind_Reg *libs) {
 
 
 /* lbind utils functions */
+
+int lbind_relindex(int idx, int onstack) {
+  return (idx > 0 || idx <= LUA_REGISTRYINDEX)
+    ? idx
+    : idx - onstack;
+}
 
 int lbind_argferror(lua_State *L, int idx, const char *fmt, ...) {
     const char *errmsg;
@@ -333,7 +327,7 @@ int lbind_setmetafield(lua_State *L, int idx, const char *field) {
   if (!lua_getmetatable(L, idx)) {
     lua_createtable(L, 0, 1);
     lua_pushvalue(L, -1);
-    lua_setmetatable(L, relate_index(idx, 2));
+    lua_setmetatable(L, lbind_relindex(idx, 2));
     newmt = 1;
   }
   lua_pushvalue(L, -2);
@@ -375,7 +369,7 @@ static int call_lut(lua_State *L, int idx, int nargs) {
   /* look up table */
   if (f == NULL) {
     lua_pushvalue(L, 2);
-    lua_rawget(L, relate_index(idx, 1));
+    lua_rawget(L, lbind_relindex(idx, 1));
     f = lua_tocfunction(L, -1);
   }
   if (f != NULL) {
@@ -481,7 +475,7 @@ static void get_default_metafield(lua_State *L, int idx, int field) {
       lua_pop(L, 1);
       push_indexf(L, 0);
       lua_pushvalue(L, -1);
-      lua_setfield(L, relate_index(idx, 2), "__index");
+      lua_setfield(L, lbind_relindex(idx, 2), "__index");
     }
   }
   else if (field == LBIND_NEWINDEX) {
@@ -490,7 +484,7 @@ static void get_default_metafield(lua_State *L, int idx, int field) {
       lua_pop(L, 1);
       push_newindexf(L);
       lua_pushvalue(L, -1);
-      lua_setfield(L, relate_index(idx, 2), "__newindex");
+      lua_setfield(L, lbind_relindex(idx, 2), "__newindex");
     }
   }
 }
@@ -614,13 +608,11 @@ static lbind_Object *testobj(lua_State *L, int idx) {
     if (!check_size(L, idx) || obj->o.instance == NULL)
       obj = NULL;
     else {
-#if 0
       get_pointerbox(L); /* 1 */
       lua_rawgetp(L, -1, obj->o.instance); /* 2 */
-      if (!lua_rawequal(L, relate_index(idx, 2), -1))
+      if (!lua_rawequal(L, lbind_relindex(idx, 2), -1))
         obj = NULL;
       lua_pop(L, 2); /* (2)(1) */
-#endif
     }
   }
   return obj;
@@ -870,7 +862,7 @@ const char *lbind_tolstring(lua_State *L, int idx, size_t *plen) {
     lbind_Object *obj = (lbind_Object*)lua_touserdata(L, idx);
     if (obj == NULL)
       return luaL_tolstring(L, idx, plen);
-    if (check_size(L, 1))
+    if (tname && check_size(L, idx))
       lua_pushfstring(L, "%s[N]: %p", tname, obj->o.instance);
     else
       lua_pushfstring(L, "userdata: %p", (void*)obj);
@@ -918,24 +910,24 @@ void *lbind_cast(lua_State *L, int idx, const lbind_Type *t) {
   return testtype(L, idx, t) ? obj->o.instance : try_cast(L, idx, t);
 }
 
-void lbind_copy(lua_State *L, const void *obj, const lbind_Type *t) {
-  if (lbind_getmetatable(L, t)) {
-    lua_pushliteral(L, "new");
-    lua_rawget(L, -2);
-  }
+int lbind_copy(lua_State *L, const void *obj, const lbind_Type *t) {
+  if (!lbind_getmetatable(L, t)) /* 1 */
+    return 0;
+  lua_pushliteral(L, "new"); /* 2 */
+  lua_rawget(L, -2); /* 2->2 */
   if (lua_isnil(L, -1)) {
-    lua_pop(L, 2);
-    lua_pushnil(L);
+    lua_pop(L, 2); /* (2)(1) */
+    return 0;
   }
-  else {
-    lua_remove(L, -2);
+  lua_remove(L, -2); /* (1) */
+  if (!lbind_retrieve(L, obj))
     lbind_register(L, obj, t);
-    if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
-      lua_pop(L, 1);
-      lua_pushnil(L);
-    }
-    lbind_track(L, -1); /* enable autodeletion for copied stuff */
+  if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+    lua_pop(L, 1);
+    return 0;
   }
+  lbind_track(L, -1); /* enable autodeletion for copied stuff */
+  return 1;
 }
 
 void *lbind_check(lua_State *L, int idx, const lbind_Type *t) {
