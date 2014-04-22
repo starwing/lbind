@@ -142,9 +142,11 @@ void lbind_install(lua_State *L, lbind_Reg *libs) {
       lua_rawset(L, -3); /* 2,3->1 */
     }
   }
+#ifndef LBIND_NO_RUNTIME
   lua_pushstring(L, "lbind"); /* 2 */
   lua_pushcfunction(L, luaopen_lbind); /* 3 */
   lua_rawset(L, -3); /* 2,3->1 */
+#endif
   lua_pop(L, 1); /* (1) */
 }
 
