@@ -59,7 +59,7 @@ LB_API const char *lbind_dumpstack (lua_State *L, const char *extramsg);
 #define lbind_returnself(L) do { lua_settop((L), 1); return 1; } while (0)
 
 
-/* lbind class install */
+/* lbind lua module install */
 typedef struct lbind_Reg {
     const char    *name; /* name of library */
     lua_CFunction  open_func; /* luaopen_ function of library */
@@ -113,17 +113,28 @@ struct lbind_Type {
     lbind_Type **bases;
 };
 
-#define LBIND_GC        0x01
+/* lbind type registry
+ *
+ * a lbind object can tracked and interned.
+ *
+ * If a object is tracked, when it collected (i.e. not used any more)
+ * it's delete function in metatable will called. otherwise it won't
+ * deleted by Lua, i.e. it's life-time is not associate with Lua.
+ *
+ * When a object is interned, You can use it's pointer to find the
+ * object itself.
+ */
+#define LBIND_TRACK     0x01
 #define LBIND_INTENT    0x02
-#define LBIND_DEFFLAG   (LBIND_GC|LBIND_INTENT)
+#define LBIND_DEFFLAG   (LBIND_TRACK|LBIND_INTENT)
 
 #define LBIND_INIT(name) { name, LBIND_DEFFLAG, NULL, NULL }
 #define LBIND_TYPE(var, name) LB_API lbind_Type var = LBIND_INIT(name)
 
-/* lbind type registry */
-LB_API void lbind_inittype     (lbind_Type *t, const char *name);
-LB_API void lbind_setbase      (lbind_Type *t, lbind_Type **bases, lbind_Cast *cast);
-LB_API int  lbind_setautotrack (lbind_Type *t, int autotrack);
+LB_API void lbind_inittype  (lbind_Type *t, const char *name);
+LB_API void lbind_setbase   (lbind_Type *t, lbind_Type **bases, lbind_Cast *cast);
+LB_API int  lbind_settrack  (lbind_Type *t, int autotrack);
+LB_API int  lbind_setintern (lbind_Type *t, int autointern);
 
 /* lbind type metatable */
 LB_API int  lbind_newmetatable (lua_State *L, luaL_Reg *libs, const lbind_Type *t);
@@ -142,22 +153,37 @@ LB_API void *lbind_cast  (lua_State *L, int idx, const lbind_Type *t);
 LB_API void *lbind_check (lua_State *L, int idx, const lbind_Type *t);
 LB_API void *lbind_test  (lua_State *L, int idx, const lbind_Type *t);
 
-#define lbind_tostring(L,idx) lbind_tolstring((L),(idx),NULL)
-
-/* lbind pointer registry */
-LB_API void *lbind_raw      (lua_State *L, size_t objsize);
-LB_API void *lbind_object   (lua_State *L, int idx);
-LB_API int   lbind_retrieve (lua_State *L, const void *p);
-
-/* lbind object creation */
-LB_API void *lbind_new        (lua_State *L, size_t objsize, const lbind_Type *t);
-LB_API void  lbind_register   (lua_State *L, const void *p, const lbind_Type *t);
-LB_API void *lbind_unregister (lua_State *L, int idx);
-
 #define lbind_optobject(L,idx,defs,t) \
     (lua_isnoneornil((L),(idx)) ? (defs) : lbind_check((L),(idx),(t)))
 
-/* lbind gc track */
+#define lbind_tostring(L,idx) lbind_tolstring((L),(idx),NULL)
+
+/* lbind object creation
+ * `lbind_raw` create a raw lbind object, not associate with a
+ * lbind_Type, if `intern` is non-zero, intern it.
+ * `lbind_new` create a lbind object associated with a lbind_Type,
+ * this type decide whether the object is signed up.
+ * `lbind_wrap` wrap a pointer to lbind object associated with
+ * lbind_Type, the type decide the signing.
+ */
+LB_API void *lbind_raw  (lua_State *L, size_t objsize, int intern);
+LB_API void *lbind_new  (lua_State *L, size_t objsize, const lbind_Type *t);
+LB_API void *lbind_wrap (lua_State *L, void *p, const lbind_Type *t);
+
+/* delete a lbind object. unsign, clear and remove metatable of it.  */
+LB_API void *lbind_delete (lua_State *L, int idx);
+
+/* get pointer from a lbind object, or NULL. */
+LB_API void *lbind_object (lua_State *L, int idx);
+
+/* intern a object with a pointer p, object is on stack. */
+LB_API void lbind_intern (lua_State *L, const void *p);
+
+/* get lbind object userdata from object pointer.
+ * require interned before */
+LB_API int lbind_retrieve (lua_State *L, const void *p);
+
+/* track/untrack object */
 LB_API void lbind_track    (lua_State *L, int idx);
 LB_API void lbind_untrack  (lua_State *L, int idx);
 LB_API int  lbind_hastrack (lua_State *L, int idx);

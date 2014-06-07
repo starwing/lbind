@@ -532,6 +532,7 @@ void lbind_setmaptable(lua_State *L, luaL_Reg libs[], int field) {
 
 
 /* light userdata utils */
+
 int lbind_getudtypebox(lua_State *L) {
   return get_box(L, LBIND_UDBOX);
 }
@@ -573,32 +574,13 @@ typedef union {
 
 #define check_size(L,n) (lua_rawlen((L),(n)) >= sizeof(lbind_Object))
 
-int lbind_retrieve(lua_State *L, const void *p) {
-  get_pointerbox(L); /* 1 */
-  lua_rawgetp(L, -1, p); /* 2 */
-  if (lua_isnil(L, -1)) {
-    lua_pop(L, 2);
-    return 0;
-  }
-  lua_remove(L, -2);
-  return 1;
-}
-
-static void intentobj(lua_State *L, lbind_Object *obj) {
-  /* stack: object */
-  get_pointerbox(L);
-  lua_pushvalue(L, -2);
-  lua_rawsetp(L, -2, obj->o.instance);
-  lua_pop(L, 1);
-}
-
 static lbind_Object *newobj(lua_State *L, size_t objsize, int flags) {
   lbind_Object *obj;
   obj = (lbind_Object*)lua_newuserdata(L, sizeof(lbind_Object) + objsize);
   obj->o.flags = flags;
   obj->o.instance = (void*)(obj+1);
   if (objsize != 0 && (flags & LBIND_INTENT) != 0)
-    intentobj(L, obj);
+    lbind_intern(L, obj->o.instance);
   return obj;
 }
 
@@ -607,6 +589,7 @@ static lbind_Object *testobj(lua_State *L, int idx) {
   if (obj != NULL) {
     if (!check_size(L, idx) || obj->o.instance == NULL)
       obj = NULL;
+#if 0
     else {
       get_pointerbox(L); /* 1 */
       lua_rawgetp(L, -1, obj->o.instance); /* 2 */
@@ -614,8 +597,13 @@ static lbind_Object *testobj(lua_State *L, int idx) {
         obj = NULL;
       lua_pop(L, 2); /* (2)(1) */
     }
+#endif
   }
   return obj;
+}
+
+void *lbind_raw(lua_State *L, size_t objsize, int intern) {
+  return newobj(L, objsize, intern ? LBIND_INTENT : 0)->o.instance;
 }
 
 void *lbind_new(lua_State *L, size_t objsize, const lbind_Type *t) {
@@ -625,42 +613,17 @@ void *lbind_new(lua_State *L, size_t objsize, const lbind_Type *t) {
   return obj->o.instance;
 }
 
-void *lbind_raw(lua_State *L, size_t objsize) {
-  return newobj(L, objsize, 0)->o.instance;
-}
-
-void *lbind_object(lua_State *L, int idx) {
-  lbind_Object *obj = testobj(L, idx);
-  return obj == NULL ? NULL : obj->o.instance;
-}
-
-void lbind_track(lua_State *L, int idx) {
-  lbind_Object *obj = testobj(L, idx);
-  if (obj != NULL)
-    obj->o.flags |= LBIND_GC;
-}
-
-void lbind_untrack(lua_State *L, int idx) {
-  lbind_Object *obj = testobj(L, idx);
-  if (obj != NULL)
-    obj->o.flags &= ~LBIND_GC;
-}
-
-int lbind_hastrack(lua_State *L, int idx) {
-  lbind_Object *obj = testobj(L, idx);
-  return obj != NULL && (obj->o.flags & LBIND_GC) != 0;
-}
-
-void lbind_register(lua_State *L, const void *p, const lbind_Type *t) {
+void *lbind_wrap(lua_State *L, void *p, const lbind_Type *t) {
   lbind_Object *obj = newobj(L, 0, t->flags);
-  obj->o.instance = (void*)p;
+  obj->o.instance = p;
   if ((obj->o.flags & LBIND_INTENT) != 0)
-    intentobj(L, obj);
+    lbind_intern(L, obj);
   if (lbind_getmetatable(L, t))
     lua_setmetatable(L, -2);
+  return p;
 }
 
-void *lbind_unregister(lua_State *L, int idx) {
+void *lbind_delete(lua_State *L, int idx) {
   void *u = NULL;
   lbind_Object *obj = (lbind_Object*)lua_touserdata(L, idx);
   if (obj != NULL) {
@@ -668,7 +631,7 @@ void *lbind_unregister(lua_State *L, int idx) {
       return NULL;
     if ((u = obj->o.instance) != NULL) {
       obj->o.instance = NULL;
-      obj->o.flags &= ~LBIND_GC;
+      obj->o.flags &= ~LBIND_TRACK;
 #if LUA_VERSION_NUM < 502
       get_pointerbox(L); /* 1 */
       lua_pushnil(L); /* 2 */
@@ -680,27 +643,77 @@ void *lbind_unregister(lua_State *L, int idx) {
   return u;
 }
 
+void *lbind_object(lua_State *L, int idx) {
+  lbind_Object *obj = testobj(L, idx);
+  return obj == NULL ? NULL : obj->o.instance;
+}
+
+void lbind_intern(lua_State *L, const void *p) {
+  /* stack: object */
+  get_pointerbox(L);
+  lua_pushvalue(L, -2);
+  lua_rawsetp(L, -2, p);
+  lua_pop(L, 1);
+}
+
+int lbind_retrieve(lua_State *L, const void *p) {
+  get_pointerbox(L); /* 1 */
+  lua_rawgetp(L, -1, p); /* 2 */
+  if (lua_isnil(L, -1)) {
+    lua_pop(L, 2);
+    return 0;
+  }
+  lua_remove(L, -2);
+  return 1;
+}
+
+void lbind_track(lua_State *L, int idx) {
+  lbind_Object *obj = testobj(L, idx);
+  if (obj != NULL)
+    obj->o.flags |= LBIND_TRACK;
+}
+
+void lbind_untrack(lua_State *L, int idx) {
+  lbind_Object *obj = testobj(L, idx);
+  if (obj != NULL)
+    obj->o.flags &= ~LBIND_TRACK;
+}
+
+int lbind_hastrack(lua_State *L, int idx) {
+  lbind_Object *obj = testobj(L, idx);
+  return obj != NULL && (obj->o.flags & LBIND_TRACK) != 0;
+}
+
 
 /* lbind type registry */
 
-LB_API void lbind_inittype(lbind_Type *t, const char *name) {
+void lbind_inittype(lbind_Type *t, const char *name) {
   t->name = name;
   t->flags = LBIND_DEFFLAG;
   t->cast = NULL;
   t->bases = NULL;
 }
 
-LB_API void lbind_setbase(lbind_Type *t, lbind_Type **bases, lbind_Cast *cast) {
+void lbind_setbase(lbind_Type *t, lbind_Type **bases, lbind_Cast *cast) {
   t->bases = bases;
   t->cast = cast;
 }
 
-LB_API int lbind_setautotrack(lbind_Type *t, int autotrack) {
-  int old_flag = t->flags&LBIND_GC ? 1 : 0;
+int lbind_settrack(lbind_Type *t, int autotrack) {
+  int old_flag = t->flags&LBIND_TRACK ? 1 : 0;
   if (autotrack)
-    t->flags |= LBIND_GC;
+    t->flags |= LBIND_TRACK;
   else
-    t->flags &= ~LBIND_GC;
+    t->flags &= ~LBIND_TRACK;
+  return old_flag;
+}
+
+int lbind_setintern(lbind_Type *t, int autointern) {
+  int old_flag = t->flags&LBIND_INTENT ? 1 : 0;
+  if (autointern)
+    t->flags |= LBIND_INTENT;
+  else
+    t->flags &= ~LBIND_INTENT;
   return old_flag;
 }
 
@@ -732,14 +745,14 @@ static int Ltostring(lua_State *L) {
 static int Lgc(lua_State *L) {
   lbind_Object *obj = (lbind_Object*)lua_touserdata(L, 1);
   if (obj != NULL && check_size(L, 1)) {
-    if ((obj->o.flags & LBIND_GC) != 0) {
+    if ((obj->o.flags & LBIND_TRACK) != 0) {
       lua_getfield(L, 1, "delete");
       if (!lua_isnil(L, -1)) {
         lua_pushvalue(L, 1);
         lua_call(L, 1, 0);
       }
-      if ((obj->o.flags & LBIND_GC) != 0)
-        lbind_unregister(L, 1);
+      if ((obj->o.flags & LBIND_TRACK) != 0)
+        lbind_delete(L, 1);
     }
   }
   return 0;
@@ -921,7 +934,7 @@ int lbind_copy(lua_State *L, const void *obj, const lbind_Type *t) {
   }
   lua_remove(L, -2); /* (1) */
   if (!lbind_retrieve(L, obj))
-    lbind_register(L, obj, t);
+    lbind_wrap(L, (void*)obj, t);
   if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
     lua_pop(L, 1);
     return 0;
@@ -1206,7 +1219,7 @@ static int Lcast(lua_State *L) {
   lbind_Type *t = test_type(L, -1);
   void *u;
   if (t != NULL && (u = lbind_cast(L, -2, t)) != NULL) {
-    lbind_register(L, u, t);
+    lbind_wrap(L, u, t);
     return 1;
   }
   return 0;
