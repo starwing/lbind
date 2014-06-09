@@ -966,7 +966,7 @@ void *lbind_test(lua_State *L, int idx, const lbind_Type *t) {
 #ifndef LBIND_NO_ENUM
 static const char *mask = 
   "         ss  s                  "
-  "s           s    wwwwwwwwww     "
+  "s           s w  wwwwwwwwww     "
   " wwwwwwwwwwwwwwwwwwwwwwwwww    w"
   " wwwwwwwwwwwwwwwwwwwwwwwwww s   ";
 
@@ -987,35 +987,37 @@ static const char *skip_ident(const char *s) {
 static int parse_mask(lbind_Enum *et, const char *s, int *penum, lua_State *L) {
   *penum = 0;
   while (*s != '\0') {
+    const char *e;
     int inversion = 0;
+    lbind_EnumItem *item;
     s = skip_white(s);
     if (*s == '~') {
       ++s;
       inversion = 1;
       s = skip_white(s);
     }
-    if (*s != '\0') {
-      lbind_EnumItem *item;
-      const char *e = skip_ident(s);
-      if (e == s || (item = lbind_findenum(et, s, e-s)) == NULL) {
-        if (L == NULL) return 0;
-        if (e == s)
-          return luaL_error(L, "unexpected token '%c'", *s);
-        else {
-          lua_pushlstring(L, s, e-s);
-          return luaL_error(L, "unexpected name '%s'", lua_tostring(L, -1));
-        }
+    if (*s == '\0') break;
+    e = skip_ident(s);
+    if (e == s || (item = lbind_findenum(et, s, e-s)) == NULL) {
+      if (L == NULL) return 0;
+      if (e == s)
+        return luaL_error(L, "unexpected token '%c'", *s);
+      else {
+        lua_pushlstring(L, s, e-s);
+        return luaL_error(L, "unexpected mask '%s'", lua_tostring(L, -1));
       }
-      if (inversion)
-        *penum &= ~item->value;
-      else
-        *penum |= item->value;
     }
+    s = e;
+    if (inversion)
+      *penum &= ~item->value;
+    else
+      *penum |= item->value;
   }
   return 1;
 }
 
 static int to_lower(int ch) {
+  if (ch == '-') return '_';
   return ch >= 'A' && ch <= 'Z' ? ch + 0x20 : ch;
 }
 

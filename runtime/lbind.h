@@ -221,6 +221,10 @@ LB_API int lbind_checkmask (lua_State *L, int idx, lbind_Enum *et);
 #define lbind_optenum(L,idx,defs,t) \
     (lua_isnoneornil((L),(idx)) ? (defs) : lbind_checkenum((L),(idx),(t)))
 
+#define lbind_optmask(L,idx,defs,t) \
+    (lua_isnoneornil((L),(idx)) ? (defs) : lbind_checkmask((L),(idx),(t)))
+
+
 #endif /* LBIND_NO_ENUM */
 
 
