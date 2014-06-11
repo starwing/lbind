@@ -91,9 +91,9 @@ void luaL_traceback(lua_State *L, lua_State *L1, const char *msg, int level) {
 
 /* lbind information hash routine */
 
-#define LBIND_POINTERBOX 0x90127B07
-#define LBIND_TYPEBOX    0x799E0B07
-#define LBIND_UDBOX      0xC5E7DB07
+#define LBIND_PTRBOX  0x90127B07
+#define LBIND_TYPEBOX 0x799E0B07
+#define LBIND_UDBOX   0xC5E7DB07
 
 static int get_box(lua_State *L, unsigned id) {
   lua_rawgetp(L, LUA_REGISTRYINDEX, (void*)id);
@@ -107,8 +107,8 @@ static int get_box(lua_State *L, unsigned id) {
   return 0;
 }
 
-static void get_pointerbox(lua_State *L) {
-  if (get_box(L, LBIND_POINTERBOX)) {
+static void get_internbox(lua_State *L) {
+  if (get_box(L, LBIND_PTRBOX)) {
     lua_pushliteral(L, "v");
     lbind_setmetafield(L, -2, "__mode");
   }
@@ -116,6 +116,31 @@ static void get_pointerbox(lua_State *L) {
 
 static void get_typebox(lua_State *L) {
   get_box(L, LBIND_TYPEBOX);
+}
+
+
+/* light userdata utils */
+
+int lbind_getudtypebox(lua_State *L) {
+  return get_box(L, LBIND_UDBOX);
+}
+
+void lbind_setlightuservalue(lua_State *L, const void *p) {
+  lbind_getudtypebox(L);
+  lua_pushvalue(L, -2);
+  lua_rawsetp(L, -2, p);
+  lua_pop(L, 1);
+}
+
+int lbind_getlightuservalue(lua_State *L, const void *p) {
+  lbind_getudtypebox(L);
+  lua_rawgetp(L, -1, p);
+  if (lua_isnil(L, -1)) {
+    lua_pop(L, 2);
+    return 0;
+  }
+  lua_remove(L, 2);
+  return 1;
 }
 
 
@@ -531,37 +556,6 @@ void lbind_setmaptable(lua_State *L, luaL_Reg libs[], int field) {
 }
 
 
-/* light userdata utils */
-
-int lbind_getudtypebox(lua_State *L) {
-  return get_box(L, LBIND_UDBOX);
-}
-
-void lbind_pushlightuserdata(lua_State *L, const void *p, int type_id) {
-  lua_pushlightuserdata(L, (void*)p);
-  lbind_getudtypebox(L);
-  lua_pushinteger(L, type_id);
-  lua_rawsetp(L, -2, p);
-  lua_pop(L, 1);
-}
-
-int lbind_getudtypeid(lua_State *L, const void *p) {
-  int type_id;
-  lbind_getudtypebox(L);
-  lua_rawgetp(L, -2, p);
-  type_id = lua_isnil(L, -1) ? -1 : lua_tointeger(L, -1);
-  lua_pop(L, 2);
-  return type_id;
-}
-
-void lbind_deludtypeid(lua_State *L, const void *p) {
-  lbind_getudtypebox(L);
-  lua_pushnil(L);
-  lua_rawsetp(L, -2, p);
-  lua_pop(L, 1);
-}
-
-
 /* lbind userdata maintain */
 
 typedef union {
@@ -591,7 +585,7 @@ static lbind_Object *testobj(lua_State *L, int idx) {
       obj = NULL;
 #if 0
     else {
-      get_pointerbox(L); /* 1 */
+      get_internbox(L); /* 1 */
       lua_rawgetp(L, -1, obj->o.instance); /* 2 */
       if (!lua_rawequal(L, lbind_relindex(idx, 2), -1))
         obj = NULL;
@@ -633,7 +627,7 @@ void *lbind_delete(lua_State *L, int idx) {
       obj->o.instance = NULL;
       obj->o.flags &= ~LBIND_TRACK;
 #if LUA_VERSION_NUM < 502
-      get_pointerbox(L); /* 1 */
+      get_internbox(L); /* 1 */
       lua_pushnil(L); /* 2 */
       lua_rawsetp(L, -3, u); /* 2->1 */
       lua_pop(L, 1); /* (1) */
@@ -650,14 +644,14 @@ void *lbind_object(lua_State *L, int idx) {
 
 void lbind_intern(lua_State *L, const void *p) {
   /* stack: object */
-  get_pointerbox(L);
+  get_internbox(L);
   lua_pushvalue(L, -2);
   lua_rawsetp(L, -2, p);
   lua_pop(L, 1);
 }
 
 int lbind_retrieve(lua_State *L, const void *p) {
-  get_pointerbox(L); /* 1 */
+  get_internbox(L); /* 1 */
   lua_rawgetp(L, -1, p); /* 2 */
   if (lua_isnil(L, -1)) {
     lua_pop(L, 2);
@@ -889,7 +883,7 @@ const char *lbind_type(lua_State *L, int idx) {
   return NULL;
 }
 
-static int testtype(lua_State *L, int idx, const lbind_Type *t) {
+static int testtypemeta(lua_State *L, int idx, const lbind_Type *t) {
   if (lua_getmetatable(L, idx)) { /* does it have a metatable? */
     int res = 1;
     if (!lbind_getmetatable(L, t)) { /* get correct metatable */
@@ -913,14 +907,14 @@ void *try_cast(lua_State *L, int idx, const lbind_Type *t) {
 }
 
 int lbind_isa(lua_State *L, int idx, const lbind_Type *t) {
-  return testtype(L, idx, t) || try_cast(L, idx, t) != NULL;
+  return testtypemeta(L, idx, t) || try_cast(L, idx, t) != NULL;
 }
 
 void *lbind_cast(lua_State *L, int idx, const lbind_Type *t) {
   lbind_Object *obj = (lbind_Object*)lua_touserdata(L, idx);
   if (!check_size(L, idx) || obj == NULL || obj->o.instance == NULL)
     return NULL;
-  return testtype(L, idx, t) ? obj->o.instance : try_cast(L, idx, t);
+  return testtypemeta(L, idx, t) ? obj->o.instance : try_cast(L, idx, t);
 }
 
 int lbind_copy(lua_State *L, const void *obj, const lbind_Type *t) {
@@ -950,7 +944,7 @@ void *lbind_check(lua_State *L, int idx, const lbind_Type *t) {
     luaL_argerror(L, idx, "invalid lbind userdata");
   if (obj != NULL && obj->o.instance == NULL)
     luaL_argerror(L, idx, "null lbind object");
-  u = testtype(L, idx, t) ? obj->o.instance : try_cast(L, idx, t);
+  u = testtypemeta(L, idx, t) ? obj->o.instance : try_cast(L, idx, t);
   if (u == NULL)
     lbind_typeerror(L, idx, t->name);
   return u;
@@ -958,13 +952,12 @@ void *lbind_check(lua_State *L, int idx, const lbind_Type *t) {
 
 void *lbind_test(lua_State *L, int idx, const lbind_Type *t) {
   lbind_Object *obj = (lbind_Object*)lua_touserdata(L, idx);
-  return testtype(L, idx, t) ? obj->o.instance : try_cast(L, idx, t);
+  return testtypemeta(L, idx, t) ? obj->o.instance : try_cast(L, idx, t);
 }
 
 
 /* lbind enum/mask support */
 #ifndef LBIND_NO_ENUM
-
 static const char *skip_white(const char *s) {
   while (*s == '\t' || *s == '\n' || *s == '\r'
       || *s == ' '  || *s == '+'  || *s == '|' || *s == ',')
@@ -1133,106 +1126,6 @@ static lbind_Type *test_type(lua_State *L, int idx) {
   return t != NULL ? t : lbind_typeobject(L, -1);
 }
 
-static int Lregister(lua_State *L) {
-  int i, top = lua_gettop(L);
-  for (i = 1; i <= top; ++i)
-    lbind_track(L, i);
-  return top;
-}
-
-static int Lunregister(lua_State *L) {
-  int i, top = lua_gettop(L);
-  for (i = 1; i <= top; ++i)
-    lbind_untrack(L, i);
-  return top;
-}
-
-static int Lowner(lua_State *L) {
-  int i, top = lua_gettop(L);
-  luaL_checkstack(L, top, "no space for owner info");
-  for (i = 1; i <= top; ++i) {
-    if (lbind_hastrack(L, i))
-      lua_pushliteral(L, "Lua");
-    else
-      lua_pushliteral(L, "C");
-  }
-  return top;
-}
-
-static int Lnull(lua_State *L) {
-  int i, top = lua_gettop(L);
-  for (i = 1; i <= top; ++i) {
-    const void *u = lbind_object(L, i);
-    if (u != NULL) {
-      lua_pushnil(L);
-      lua_replace(L, i);
-    }
-  }
-  return top;
-}
-
-static int Lvalid(lua_State *L) {
-  const void *u = lua_touserdata(L, -1);
-  if (u != NULL) {
-    get_pointerbox(L);
-    lua_rawgetp(L, -1, u);
-  }
-  else
-    lua_pushnil(L);
-  return 1;
-}
-
-static int Ldelete(lua_State *L) {
-  lua_getfield(L, -1, "delete");
-  if (!lua_isnil(L, -1)) {
-    lua_pushvalue(L, -2);
-    lua_call(L, 1, 0);
-  }
-  return 0;
-}
-
-static int Linfo(lua_State *L) {
-#define INFOS(X) \
-  X("pointers",     get_pointerbox(L)) \
-  X("types",        get_typebox(L))    \
-
-  size_t len;
-  const char *s = luaL_checklstring(L, 1, &len);
-#define X(opt,cmd)               \
-  if (strncmp(s, opt, len) == 0) \
-  { cmd; return 1; }
-  INFOS(X)
-#undef  X
-  return luaL_argerror(L, 1, "invalid option");
-#undef INFOS
-}
-
-static int Lisa(lua_State *L) {
-  lbind_Type *t = test_type(L, -1);
-  if (t != NULL) lua_pushboolean(L, lbind_isa(L, -2, t));
-  return 1;
-}
-
-static int Lcast(lua_State *L) {
-  lbind_Type *t = test_type(L, -1);
-  void *u;
-  if (t != NULL && (u = lbind_cast(L, -2, t)) != NULL) {
-    lbind_wrap(L, u, t);
-    return 1;
-  }
-  return 0;
-}
-
-static int Ltype(lua_State *L) {
-  lbind_Type *t = test_type(L, -1);
-  if (t == NULL) {
-    lua_pushstring(L, luaL_typename(L, -1));
-    return 1;
-  }
-  lua_pushstring(L, t->name);
-  return 1;
-}
-
 static int Lbases(lua_State *L) {
   int i = 1;
   lbind_Type **bases, *t = test_type(L, 1);
@@ -1254,20 +1147,121 @@ static int Lbases(lua_State *L) {
   return 1;
 }
 
+static int Ltrack(lua_State *L) {
+  int i, top = lua_gettop(L);
+  for (i = 1; i <= top; ++i)
+    lbind_track(L, i);
+  return top;
+}
+
+static int Luntrack(lua_State *L) {
+  int i, top = lua_gettop(L);
+  for (i = 1; i <= top; ++i)
+    lbind_untrack(L, i);
+  return top;
+}
+
+static int Lowner(lua_State *L) {
+  int i, top = lua_gettop(L);
+  luaL_checkstack(L, top, "no space for owner info");
+  for (i = 1; i <= top; ++i) {
+    if (lbind_hastrack(L, i))
+      lua_pushliteral(L, "Lua");
+    else
+      lua_pushliteral(L, "C");
+  }
+  return top;
+}
+
+static int Ltype(lua_State *L) {
+  int i, top = lua_gettop(L);
+  if (top == 0) {
+    get_typebox(L);
+    return 1;
+  }
+  for (i = 1; i <= top; ++i) {
+    lbind_Type *t = test_type(L, i);
+    lua_pushstring(L, t != NULL ? t->name : luaL_typename(L, -1));
+    lua_replace(L, i);
+  }
+  return top;
+}
+
+static int Lpointer(lua_State *L) {
+  int i, top = lua_gettop(L);
+  if (top == 0) {
+    get_internbox(L);
+    return 1;
+  }
+  for (i = 1; i <= top; ++i) {
+    const void *u = lbind_object(L, i);
+    if (u == NULL)
+      lua_pushnil(L);
+    else
+      lua_pushlightuserdata(L, (void*)u);
+    lua_replace(L, i);
+  }
+  return top;
+}
+
+static int Ldelete(lua_State *L) {
+  int i, top = lua_gettop(L);
+  for (i = 1; i <= top; ++i) {
+    lua_getfield(L, i, "delete");
+    if (!lua_isnil(L, -1)) {
+      lua_pushvalue(L, i);
+      lua_call(L, 1, 0);
+    }
+    else {
+      lua_pop(L, 1);
+      lbind_delete(L, i);
+    }
+  }
+  return 0;
+}
+
+static int Lisa(lua_State *L) {
+  lbind_Type *t = test_type(L, 1);
+  int i, top = lua_gettop(L);
+  if (t == NULL)
+    lbind_typeerror(L, 1, "lbind object/type");
+  for (i = 2; i <= top; ++i) {
+    if (!lbind_isa(L, i, t)) {
+      lua_pushnil(L);
+      lua_replace(L, i);
+    }
+  }
+  return top - 1;
+}
+
+static int Lcastto(lua_State *L) {
+  lbind_Type *t = test_type(L, 1);
+  int i, top = lua_gettop(L);
+  if (t == NULL)
+    lbind_typeerror(L, 1, "lbind object/type");
+  for (i = 2; i <= top; ++i) {
+    void *u = lbind_cast(L, -2, t);
+    if (u == NULL)
+      lua_pushnil(L);
+    else if (!lbind_retrieve(L, u))
+      lbind_wrap(L, u, t);
+    lua_replace(L, i);
+  }
+  return top - 1;
+}
+
 int luaopen_lbind(lua_State *L) {
   luaL_Reg libs[] = {
 #define ENTRY(name) { #name, L##name }
     ENTRY(bases),
-    ENTRY(cast),
+    ENTRY(castto),
     ENTRY(delete),
-    ENTRY(info),
     ENTRY(isa),
-    ENTRY(null),
     ENTRY(owner),
-    ENTRY(register),
+    ENTRY(pointer),
+    ENTRY(track),
     ENTRY(type),
-    ENTRY(unregister),
-    ENTRY(valid),
+    ENTRY(untrack),
 #undef ENTRY
     { NULL, NULL }
   };

@@ -88,10 +88,9 @@ LB_API void lbind_setmaptable (lua_State *L, luaL_Reg libs[], int field);
 
 
 /* light userdata utils */
-LB_API void lbind_pushlightuserdata (lua_State *L, const void *p, int type_id);
 LB_API int  lbind_getudtypebox (lua_State *L);
-LB_API int  lbind_getudtypeid  (lua_State *L, const void *p);
-LB_API void lbind_deludtypeid  (lua_State *L, const void *p);
+LB_API int  lbind_getlightuservalue (lua_State *L, const void *p);
+LB_API void lbind_setlightuservalue (lua_State *L, const void *p);
 
 
 /* lbind class runtime */
