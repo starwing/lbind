@@ -895,7 +895,6 @@ static int testtypemeta(lua_State *L, int idx, const lbind_Type *t) {
     lua_pop(L, 2);
     return res;
   }
-  lua_pop(L, 1);
   return 0;
 }
 
@@ -981,19 +980,18 @@ static int parse_mask(lbind_Enum *et, const char *s, int *penum, lua_State *L) {
     lbind_EnumItem *item;
     s = skip_white(s);
     if (*s == '~') {
-      ++s;
       inversion = 1;
-      s = skip_white(s);
+      s = skip_white(s+1);
     }
     if (*s == '\0') break;
     e = skip_ident(s);
     if (e == s || (item = lbind_findenum(et, s, e-s)) == NULL) {
       if (L == NULL) return 0;
       if (e == s)
-        return luaL_error(L, "unexpected token '%c'", *s);
+        return luaL_error(L, "unexpected token '%c' in %s", *s, et->name);
       else {
         lua_pushlstring(L, s, e-s);
-        return luaL_error(L, "unexpected mask '%s'", lua_tostring(L, -1));
+        return luaL_error(L, "unexpected mask '%s' in %s", lua_tostring(L, -1), et->name);
       }
     }
     s = e;
