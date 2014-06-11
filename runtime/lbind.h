@@ -126,7 +126,7 @@ struct lbind_Type {
  */
 #define LBIND_TRACK     0x01
 #define LBIND_INTENT    0x02
-#define LBIND_DEFFLAG   (LBIND_TRACK|LBIND_INTENT)
+#define LBIND_DEFFLAG   (LBIND_TRACK)
 
 #define LBIND_INIT(name) { name, LBIND_DEFFLAG, NULL, NULL }
 #define LBIND_TYPE(var, name) LB_API lbind_Type var = LBIND_INIT(name)

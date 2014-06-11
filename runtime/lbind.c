@@ -967,7 +967,7 @@ void *lbind_test(lua_State *L, int idx, const lbind_Type *t) {
 
 static const char *skip_white(const char *s) {
   while (*s == '\t' || *s == '\n' || *s == '\r'
-      || *s == ' '  || *s == '+'  || *s == '|')
+      || *s == ' '  || *s == '+'  || *s == '|' || *s == ',')
     ++s;
   return s;
 }
