@@ -964,22 +964,18 @@ void *lbind_test(lua_State *L, int idx, const lbind_Type *t) {
 
 /* lbind enum/mask support */
 #ifndef LBIND_NO_ENUM
-static const char *mask = 
-  "         ss  s                  "
-  "s           s w  wwwwwwwwww     "
-  " wwwwwwwwwwwwwwwwwwwwwwwwww    w"
-  " wwwwwwwwwwwwwwwwwwwwwwwwww s   ";
 
 static const char *skip_white(const char *s) {
-  int ch;
-  while ((ch = (*s & 0xFF)) < 0x7F && mask[ch] == 's')
+  while (*s == '\t' || *s == '\n' || *s == '\r'
+      || *s == ' '  || *s == '+'  || *s == '|')
     ++s;
   return s;
 }
 
 static const char *skip_ident(const char *s) {
-  int ch;
-  while ((ch = (*s & 0xFF)) < 0x7F && mask[ch] == 'w')
+  while ((*s >= 'A' && *s <= 'Z') ||
+         (*s >= 'a' && *s <= 'z') ||
+         (*s == '-' || *s == '_'))
     ++s;
   return s;
 }
