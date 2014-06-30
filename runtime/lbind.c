@@ -407,13 +407,17 @@ static int call_lut(lua_State *L, int idx, int nargs) {
 static int Lnewindex(lua_State *L) {
   int nret;
   /* upvalue: seti, seth */
+  /* order:
+   *  - lut
+   *  - accessor
+   *  - uservalue
+   */
   if (!lua_isnone(L, lua_upvalueindex(1)) &&
-      (nret = call_accessor(L, lua_upvalueindex(1), 3)) >= 0)
+      (nret = call_lut(L, lua_upvalueindex(1), 3)) >= 0)
     return nret;
   if (!lua_isnone(L, lua_upvalueindex(2)) &&
-      (nret = call_lut(L, lua_upvalueindex(2), 3)) >= 0)
+      (nret = call_accessor(L, lua_upvalueindex(2), 3)) >= 0)
     return nret;
-  /* set it in uservalue table */
   if (lua_isuserdata(L, 1)) {
     lua_getuservalue(L, 1);
     if (lua_isnil(L, -1)) {
@@ -432,6 +436,13 @@ static int Lnewindex(lua_State *L) {
 static int Lindex(lua_State *L) {
   int i, nret;
   /* upvalue: seti, seth, tables */
+  /* order:
+   *  - uservalue
+   *  - metatable
+   *  - lut
+   *  - accessor
+   *  - upvalue tables
+   */
   if (lua_isuserdata(L, 1)) {
     lua_getuservalue(L, 1);
     if (!lua_isnil(L, -1)) {
@@ -448,10 +459,10 @@ static int Lindex(lua_State *L) {
       return 1;
   }
   if (!lua_isnone(L, lua_upvalueindex(1)) &&
-      (nret = call_accessor(L, lua_upvalueindex(1), 2)) >= 0)
+      (nret = call_lut(L, lua_upvalueindex(1), 2)) >= 0)
     return nret;
   if (!lua_isnone(L, lua_upvalueindex(2)) &&
-      (nret = call_lut(L, lua_upvalueindex(2), 2)) >= 0)
+      (nret = call_accessor(L, lua_upvalueindex(2), 2)) >= 0)
     return nret;
   /* find in libtable/superlibtable */
   for (i = 3; !lua_isnone(L, lua_upvalueindex(i)); ++i) {
@@ -483,14 +494,9 @@ static void push_newindexf(lua_State *L) {
   lua_pushcclosure(L, Lnewindex, 2);
 }
 
-void lbind_indexf(lua_State *L, int ntables) {
+void lbind_setindexf(lua_State *L, int ntables) {
   push_indexf(L, ntables);
   lua_setfield(L, -2, "__index");
-}
-
-void lbind_newindexf(lua_State *L) {
-  push_newindexf(L);
-  lua_setfield(L, -2, "__newindex");
 }
 
 static void get_default_metafield(lua_State *L, int idx, int field) {
@@ -529,11 +535,11 @@ static void set_cfuncupvalue(lua_State *L, lua_CFunction f, int field, int idx) 
   }
 }
 
-void lbind_setarrayf(lua_State *L, lua_CFunction f, int field) {
+void lbind_sethashf(lua_State *L, lua_CFunction f, int field) {
   set_cfuncupvalue(L, f, field, 1);
 }
 
-void lbind_sethashf(lua_State *L, lua_CFunction f, int field) {
+void lbind_setarrayf(lua_State *L, lua_CFunction f, int field) {
   set_cfuncupvalue(L, f, field, 2);
 }
 
@@ -543,13 +549,13 @@ void lbind_setmaptable(lua_State *L, luaL_Reg libs[], int field) {
   if ((field & LBIND_INDEX) != 0) {
     get_default_metafield(L, -2, LBIND_INDEX);
     lua_pushvalue(L, -2);
-    lua_setupvalue(L, -2, 2);
+    lua_setupvalue(L, -2, 1);
     lua_pop(L, 1);
   }
   if ((field & LBIND_NEWINDEX) != 0) {
     get_default_metafield(L, -2, LBIND_NEWINDEX);
     lua_pushvalue(L, -2);
-    lua_setupvalue(L, -2, 2);
+    lua_setupvalue(L, -2, 1);
     lua_pop(L, 1);
   }
   lua_pop(L, 1);
@@ -805,7 +811,7 @@ int lbind_newmetatable(lua_State *L, luaL_Reg *libs, const lbind_Type *t) {
   }
 
   if (t->bases != NULL && t->bases[0] != NULL) {
-    int nups = 0; /* stack: metatable */
+    int nups = 0;
     int freeslots = 0;
     lbind_Type **bases = t->bases;
     for (; *bases != NULL; ++nups, ++bases) {
@@ -816,7 +822,7 @@ int lbind_newmetatable(lua_State *L, luaL_Reg *libs, const lbind_Type *t) {
       if (!lbind_getmetatable(L, *bases))
         lua_pushlightuserdata(L, *bases);
     }
-    lbind_indexf(L, nups);
+    lbind_setindexf(L, nups);
   }
 
   else if (!lbind_hasfield(L, -1, "__index")) {

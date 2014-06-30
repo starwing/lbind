@@ -80,11 +80,10 @@ LB_API int lbind_setlibcall   (lua_State *L, const char *method);
 #define LBIND_INDEX     0x01
 #define LBIND_NEWINDEX  0x02
 
-LB_API void lbind_indexf      (lua_State *L, int ntables);
-LB_API void lbind_newindexf   (lua_State *L);
-LB_API void lbind_setarrayf   (lua_State *L, lua_CFunction f, int field);
-LB_API void lbind_sethashf    (lua_State *L, lua_CFunction f, int field);
-LB_API void lbind_setmaptable (lua_State *L, luaL_Reg libs[], int field);
+LB_API void lbind_setindexf    (lua_State *L, int ntables);
+LB_API void lbind_setarrayf    (lua_State *L, lua_CFunction f, int field);
+LB_API void lbind_sethashf     (lua_State *L, lua_CFunction f, int field);
+LB_API void lbind_setmaptable  (lua_State *L, luaL_Reg libs[], int field);
 
 
 /* light userdata utils */
@@ -152,7 +151,7 @@ LB_API void *lbind_cast  (lua_State *L, int idx, const lbind_Type *t);
 LB_API void *lbind_check (lua_State *L, int idx, const lbind_Type *t);
 LB_API void *lbind_test  (lua_State *L, int idx, const lbind_Type *t);
 
-#define lbind_optobject(L,idx,defs,t) \
+#define lbind_opt(L,idx,defs,t) \
     (lua_isnoneornil((L),(idx)) ? (defs) : lbind_check((L),(idx),(t)))
 
 #define lbind_tostring(L,idx) lbind_tolstring((L),(idx),NULL)
