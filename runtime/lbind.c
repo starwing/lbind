@@ -327,6 +327,14 @@ int lbind_self(lua_State *L, const void *p, const char *method, int nargs, int *
   return 1;
 }
 
+int lbind_pcall(lua_State *L, int nargs, int nrets) {
+  int res;
+  lua_pushcfunction(L, Ltraceback);
+  lua_insert(L, -nargs-2);
+  res = lua_pcall(L, nargs, nrets, -nargs-2);
+  lua_remove(L, -nrets-1);
+  return res;
+}
 
 /* metatable utils */
 
@@ -410,6 +418,7 @@ static int Lnewindex(lua_State *L) {
   /* order:
    *  - lut
    *  - accessor
+   *  - normaltable
    *  - uservalue
    */
   if (!lua_isnone(L, lua_upvalueindex(1)) &&
@@ -418,18 +427,21 @@ static int Lnewindex(lua_State *L) {
   if (!lua_isnone(L, lua_upvalueindex(2)) &&
       (nret = call_accessor(L, lua_upvalueindex(2), 3)) >= 0)
     return nret;
-  if (lua_isuserdata(L, 1)) {
-    lua_getuservalue(L, 1);
-    if (lua_isnil(L, -1)) {
-      lua_pop(L, 1);
-      lua_newtable(L);
-      lua_pushvalue(L, -1);
-      lua_setuservalue(L, 1);
-    }
-    lua_pushvalue(L, 2);
-    lua_pushvalue(L, 3);
-    lua_rawset(L, -3);
+  if (!lua_isuserdata(L, 1)) {
+    lua_settop(L, 3);
+    lua_rawset(L, 1);
+    return 0;
   }
+  lua_getuservalue(L, 1);
+  if (lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_setuservalue(L, 1);
+  }
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_rawset(L, -3);
   return 0;
 }
 
@@ -617,7 +629,7 @@ void *lbind_wrap(lua_State *L, void *p, const lbind_Type *t) {
   lbind_Object *obj = newobj(L, 0, t->flags);
   obj->o.instance = p;
   if ((obj->o.flags & LBIND_INTENT) != 0)
-    lbind_intern(L, obj);
+    lbind_intern(L, p);
   if (lbind_getmetatable(L, t))
     lua_setmetatable(L, -2);
   return p;

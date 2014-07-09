@@ -53,10 +53,13 @@ LB_API int lbind_matcherror (lua_State *L, const char *extramsg);
 LB_API int lbind_copystack  (lua_State *from, lua_State *to, int nargs);
 LB_API int lbind_hasfield   (lua_State *L, int idx, const char *field);
 LB_API int lbind_self       (lua_State *L, const void *p, const char *method, int nargs, int *ptraceback);
+LB_API int lbind_pcall      (lua_State *L, int nargs, int nrets);
 
 LB_API const char *lbind_dumpstack (lua_State *L, const char *extramsg);
 
 #define lbind_returnself(L) do { lua_settop((L), 1); return 1; } while (0)
+
+#define lbind_printstack(L, msg) ( printf("%s\n", lbind_dumpstack((L), (msg))), lua_pop((L), 1) )
 
 
 /* lbind lua module install */
@@ -84,6 +87,16 @@ LB_API void lbind_setindexf    (lua_State *L, int ntables);
 LB_API void lbind_setarrayf    (lua_State *L, lua_CFunction f, int field);
 LB_API void lbind_sethashf     (lua_State *L, lua_CFunction f, int field);
 LB_API void lbind_setmaptable  (lua_State *L, luaL_Reg libs[], int field);
+
+#define lbind_checkreadonly(L) ((void)( \
+            lua_gettop(L)!=2 &&         \
+            luaL_error((L), "field %s is read-only", \
+                lbind_tostring((L), 2))))
+
+#define lbind_checkwriteonly(L) ((void)( \
+            lua_gettop(L)!=3 &&          \
+            luaL_error((L), "field %s is write-only", \
+                lbind_tostring((L), 2))))
 
 
 /* light userdata utils */
