@@ -591,7 +591,7 @@ static lbind_Object *newobj(lua_State *L, size_t objsize, int flags) {
   obj = (lbind_Object*)lua_newuserdata(L, sizeof(lbind_Object) + objsize);
   obj->o.flags = flags;
   obj->o.instance = (void*)(obj+1);
-  if (objsize != 0 && (flags & LBIND_INTENT) != 0)
+  if (objsize != 0 && (flags & LBIND_INTERN) != 0)
     lbind_intern(L, obj->o.instance);
   return obj;
 }
@@ -615,7 +615,7 @@ static lbind_Object *testobj(lua_State *L, int idx) {
 }
 
 void *lbind_raw(lua_State *L, size_t objsize, int intern) {
-  return newobj(L, objsize, intern ? LBIND_INTENT : 0)->o.instance;
+  return newobj(L, objsize, intern ? LBIND_INTERN : 0)->o.instance;
 }
 
 void *lbind_new(lua_State *L, size_t objsize, const lbind_Type *t) {
@@ -628,7 +628,7 @@ void *lbind_new(lua_State *L, size_t objsize, const lbind_Type *t) {
 void *lbind_wrap(lua_State *L, void *p, const lbind_Type *t) {
   lbind_Object *obj = newobj(L, 0, t->flags);
   obj->o.instance = p;
-  if ((obj->o.flags & LBIND_INTENT) != 0)
+  if ((obj->o.flags & LBIND_INTERN) != 0)
     lbind_intern(L, p);
   if (lbind_getmetatable(L, t))
     lua_setmetatable(L, -2);
@@ -721,11 +721,11 @@ int lbind_settrack(lbind_Type *t, int autotrack) {
 }
 
 int lbind_setintern(lbind_Type *t, int autointern) {
-  int old_flag = t->flags&LBIND_INTENT ? 1 : 0;
+  int old_flag = t->flags&LBIND_INTERN ? 1 : 0;
   if (autointern)
-    t->flags |= LBIND_INTENT;
+    t->flags |= LBIND_INTERN;
   else
-    t->flags &= ~LBIND_INTENT;
+    t->flags &= ~LBIND_INTERN;
   return old_flag;
 }
 
