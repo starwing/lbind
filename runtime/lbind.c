@@ -26,7 +26,7 @@ void lua_rawsetp(lua_State *L, int idx, const void *p) {
   lua_rawset(L, lbind_relindex(idx, 1));
 }
 
-void luaL_setfuncs(lua_State *L, luaL_Reg *l, int nup) {
+void luaL_setfuncs(lua_State *L, const luaL_Reg *l, int nup) {
   luaL_checkstack(L, nup, "too many upvalues");
   for (; l->name != NULL; l++) {  /* fill the table with given functions */
     int i;
@@ -60,29 +60,47 @@ const char *luaL_tolstring(lua_State *L, int idx, size_t *plen) {
   return lua_tolstring(L, -1, plen);
 }
 
-void luaL_traceback(lua_State *L, lua_State *L1, const char *msg, int level) {
-  lua_Debug ar;
+/* LuaJIT has its own luaL_traceback(),
+ * so we do not export this, use static instead.  */
+#define LEVELS1	12	/* size of the first part of the stack */
+#define LEVELS2	10	/* size of the second part of the stack */
+
+static void luaL_traceback(lua_State *L, lua_State *L1, const char *msg, int level) {
   int top = lua_gettop(L);
-  int numlevels = countlevels(L1);
-  int mark = (numlevels > LEVELS1 + LEVELS2) ? LEVELS1 : 0;
+  int firstpart = 1;  /* still before eventual `...' */
+  lua_Debug ar;
   if (msg) lua_pushfstring(L, "%s\n", msg);
   lua_pushliteral(L, "stack traceback:");
   while (lua_getstack(L1, level++, &ar)) {
-    if (level == mark) {  /* too many levels? */
-      lua_pushliteral(L, "\n\t...");  /* add a '...' */
-      level = numlevels - LEVELS2;  /* and skip to last ones */
+    if (level > LEVELS1 && firstpart) {
+      /* no more than `LEVELS2' more levels? */
+      if (!lua_getstack(L1, level+LEVELS2, &ar))
+        level--;  /* keep going */
+      else {
+        lua_pushliteral(L, "\n\t...");  /* too many levels */
+        while (lua_getstack(L1, level+LEVELS2, &ar))  /* find last levels */
+          level++;
+      }
+      firstpart = 0;
+      continue;
     }
+    lua_pushliteral(L, "\n\t");
+    lua_getinfo(L1, "Snl", &ar);
+    lua_pushfstring(L, "%s:", ar.short_src);
+    if (ar.currentline > 0)
+      lua_pushfstring(L, "%d:", ar.currentline);
+    if (*ar.namewhat != '\0')  /* is there a name? */
+        lua_pushfstring(L, " in function " LUA_QS, ar.name);
     else {
-      lua_getinfo(L1, "Slnt", &ar);
-      lua_pushfstring(L, "\n\t%s:", ar.short_src);
-      if (ar.currentline > 0)
-        lua_pushfstring(L, "%d:", ar.currentline);
-      lua_pushliteral(L, " in ");
-      pushfuncname(L, &ar);
-      if (ar.istailcall)
-        lua_pushliteral(L, "\n\t(...tail calls...)");
-      lua_concat(L, lua_gettop(L) - top);
+      if (*ar.what == 'm')  /* main? */
+        lua_pushfstring(L, " in main chunk");
+      else if (*ar.what == 'C' || *ar.what == 't')
+        lua_pushliteral(L, " ?");  /* C function or tail call */
+      else
+        lua_pushfstring(L, " in function <%s:%d>",
+                           ar.short_src, ar.linedefined);
     }
+    lua_concat(L, lua_gettop(L) - top);
   }
   lua_concat(L, lua_gettop(L) - top);
 }

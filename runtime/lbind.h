@@ -22,8 +22,6 @@ LUA_API void (lua_rawsetp) (lua_State *L, int idx, const void *p);
 LUA_API void (lua_rawgetp) (lua_State *L, int idx, const void *p);
 LUALIB_API const char *(luaL_tolstring) (lua_State *L, int idx, size_t *len);
 LUALIB_API void (luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup);
-LUALIB_API void (luaL_traceback) (lua_State *L, lua_State *L1,
-                                  const char *msg, int level);
 #endif /* LUA_VERSION_NUM */
 
 
