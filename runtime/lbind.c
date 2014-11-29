@@ -604,6 +604,20 @@ typedef union {
 
 #define check_size(L,n) (lua_rawlen((L),(n)) >= sizeof(lbind_Object))
 
+void *lbind_touserdata(lua_State *L, int idx) {
+#ifndef LBIND_NO_PEER
+  if (lua_istable(L, idx)) {
+    lua_getfield(L, idx, "__peer");
+    if (lua_isnil(L, -1)) {
+      lua_pop(L, 1);
+      return NULL;
+    }
+    lua_replace(L, idx);
+  }
+#endif
+  return lua_touserdata(L, idx);
+}
+
 static lbind_Object *newobj(lua_State *L, size_t objsize, int flags) {
   lbind_Object *obj;
   obj = (lbind_Object*)lua_newuserdata(L, sizeof(lbind_Object) + objsize);
@@ -615,7 +629,7 @@ static lbind_Object *newobj(lua_State *L, size_t objsize, int flags) {
 }
 
 static lbind_Object *testobj(lua_State *L, int idx) {
-  lbind_Object *obj = (lbind_Object*)lua_touserdata(L, idx);
+  lbind_Object *obj = (lbind_Object*)lbind_touserdata(L, idx);
   if (obj != NULL) {
     if (!check_size(L, idx) || obj->o.instance == NULL)
       obj = NULL;
@@ -655,7 +669,7 @@ void *lbind_wrap(lua_State *L, void *p, const lbind_Type *t) {
 
 void *lbind_delete(lua_State *L, int idx) {
   void *u = NULL;
-  lbind_Object *obj = (lbind_Object*)lua_touserdata(L, idx);
+  lbind_Object *obj = (lbind_Object*)lbind_touserdata(L, idx);
   if (obj != NULL) {
     if (!check_size(L, idx))
       return NULL;
@@ -902,7 +916,7 @@ const char *lbind_tolstring(lua_State *L, int idx, size_t *plen) {
   if (obj != NULL && tname)
     lua_pushfstring(L, "%s: %p", tname, obj->o.instance);
   else if (obj == NULL) {
-    lbind_Object *obj = (lbind_Object*)lua_touserdata(L, idx);
+    lbind_Object *obj = (lbind_Object*)lbind_touserdata(L, idx);
     if (obj == NULL)
       return luaL_tolstring(L, idx, plen);
     if (tname && check_size(L, idx))
@@ -946,7 +960,7 @@ int lbind_isa(lua_State *L, int idx, const lbind_Type *t) {
 }
 
 void *lbind_cast(lua_State *L, int idx, const lbind_Type *t) {
-  lbind_Object *obj = (lbind_Object*)lua_touserdata(L, idx);
+  lbind_Object *obj = (lbind_Object*)lbind_touserdata(L, idx);
   if (!check_size(L, idx) || obj == NULL || obj->o.instance == NULL)
     return NULL;
   return testtypemeta(L, idx, t) ? obj->o.instance : try_cast(L, idx, t);
@@ -973,7 +987,7 @@ int lbind_copy(lua_State *L, const void *obj, const lbind_Type *t) {
 }
 
 void *lbind_check(lua_State *L, int idx, const lbind_Type *t) {
-  lbind_Object *obj = (lbind_Object*)lua_touserdata(L, idx);
+  lbind_Object *obj = (lbind_Object*)lbind_touserdata(L, idx);
   void *u = NULL;
   if (!check_size(L, idx))
     luaL_argerror(L, idx, "invalid lbind userdata");
@@ -986,7 +1000,7 @@ void *lbind_check(lua_State *L, int idx, const lbind_Type *t) {
 }
 
 void *lbind_test(lua_State *L, int idx, const lbind_Type *t) {
-  lbind_Object *obj = (lbind_Object*)lua_touserdata(L, idx);
+  lbind_Object *obj = (lbind_Object*)lbind_touserdata(L, idx);
   return testtypemeta(L, idx, t) ? obj->o.instance : try_cast(L, idx, t);
 }
 

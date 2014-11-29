@@ -103,6 +103,15 @@ LB_API int  lbind_getlightuservalue (lua_State *L, const void *p);
 LB_API void lbind_setlightuservalue (lua_State *L, const void *p);
 
 
+/* lbind peer table support, define LBIND_NO_PEER to disable this.
+ *
+ * peer table is a normal table that has a field "__peer", t.__peer is
+ * the real userdata, in this case, lbind use this table as it is
+ * t.__peer. i.e. lbind treat that table as a native object.
+ */
+LB_API void *lbind_getuserdata (lua_State *L, int idx);
+
+
 /* lbind class runtime */
 
 /*
