@@ -9,24 +9,24 @@
 
 /* compatible apis */
 #if LUA_VERSION_NUM < 502
-lua_Integer lua_tointegerx(lua_State *L, int idx, int *valid) {
+LUA_API lua_Integer lua_tointegerx(lua_State *L, int idx, int *valid) {
   lua_Integer n;
   *valid = (n = lua_tointeger(L, idx)) != 0 || lua_isnumber(L, idx);
   return n;
 }
 
-void lua_rawgetp(lua_State *L, int idx, const void *p) {
+LUA_API void lua_rawgetp(lua_State *L, int idx, const void *p) {
   lua_pushlightuserdata(L, (void*)p);
   lua_rawget(L, lbind_relindex(idx, 1));
 }
 
-void lua_rawsetp(lua_State *L, int idx, const void *p) {
+LUA_API void lua_rawsetp(lua_State *L, int idx, const void *p) {
   lua_pushlightuserdata(L, (void*)p);
   lua_insert(L, -2);
   lua_rawset(L, lbind_relindex(idx, 1));
 }
 
-void luaL_setfuncs(lua_State *L, const luaL_Reg *l, int nup) {
+LUALIB_API void luaL_setfuncs(lua_State *L, luaL_Reg *l, int nup) {
   luaL_checkstack(L, nup, "too many upvalues");
   for (; l->name != NULL; l++) {  /* fill the table with given functions */
     int i;
@@ -38,7 +38,7 @@ void luaL_setfuncs(lua_State *L, const luaL_Reg *l, int nup) {
   lua_pop(L, nup);  /* remove upvalues */
 }
 
-const char *luaL_tolstring(lua_State *L, int idx, size_t *plen) {
+LUALIB_API const char *luaL_tolstring(lua_State *L, int idx, size_t *plen) {
   if (!luaL_callmeta(L, idx, "__tostring")) {  /* no metafield? */
     switch (lua_type(L, idx)) {
       case LUA_TNUMBER:
@@ -139,18 +139,18 @@ static void get_typebox(lua_State *L) {
 
 /* light userdata utils */
 
-int lbind_getudtypebox(lua_State *L) {
+LB_API int lbind_getudtypebox(lua_State *L) {
   return get_box(L, LBIND_UDBOX);
 }
 
-void lbind_setlightuservalue(lua_State *L, const void *p) {
+LB_API void lbind_setlightuservalue(lua_State *L, const void *p) {
   lbind_getudtypebox(L);
   lua_pushvalue(L, -2);
   lua_rawsetp(L, -2, p);
   lua_pop(L, 1);
 }
 
-int lbind_getlightuservalue(lua_State *L, const void *p) {
+LB_API int lbind_getlightuservalue(lua_State *L, const void *p) {
   lbind_getudtypebox(L);
   lua_rawgetp(L, -1, p);
   if (lua_isnil(L, -1)) {
@@ -164,7 +164,7 @@ int lbind_getlightuservalue(lua_State *L, const void *p) {
 
 /* lbind class register */
 
-void lbind_install(lua_State *L, lbind_Reg *libs) {
+LB_API void lbind_install(lua_State *L, lbind_Reg *libs) {
   lua_getfield(L, LUA_REGISTRYINDEX, "_PRELOAD"); /* 1 */
   if (libs != NULL) {
     for (; libs->name != NULL; ++libs) {
@@ -181,7 +181,7 @@ void lbind_install(lua_State *L, lbind_Reg *libs) {
   lua_pop(L, 1); /* (1) */
 }
 
-int lbind_requiref(lua_State *L, const char *name, lua_CFunction loader) {
+LB_API int lbind_requiref(lua_State *L, const char *name, lua_CFunction loader) {
   lua_getfield(L, LUA_REGISTRYINDEX, "_LOADED"); /* 1 */
   lua_getfield(L, -1, name); /* 2 */
   if (!lua_isnil(L, -1)) {
@@ -201,7 +201,7 @@ int lbind_requiref(lua_State *L, const char *name, lua_CFunction loader) {
   return 1;
 }
 
-void lbind_requirelibs(lua_State *L, lbind_Reg *libs) {
+LB_API void lbind_requirelibs(lua_State *L, lbind_Reg *libs) {
   lua_getfield(L, LUA_REGISTRYINDEX, "_LOADED"); /* 1 */
   for (; libs->name != NULL; ++libs) {
     lua_pushstring(L, libs->name); /* 2 */
@@ -220,7 +220,7 @@ void lbind_requirelibs(lua_State *L, lbind_Reg *libs) {
   lua_pop(L, 1);
 }
 
-void lbind_requireinto(lua_State *L, const char *prefix, lbind_Reg *libs) {
+LB_API void lbind_requireinto(lua_State *L, const char *prefix, lbind_Reg *libs) {
   /* stack: table */
   lua_getfield(L, LUA_REGISTRYINDEX, "_LOADED"); /* 1 */
   for (; libs->name != NULL; ++libs) {
@@ -250,13 +250,13 @@ void lbind_requireinto(lua_State *L, const char *prefix, lbind_Reg *libs) {
 
 /* lbind utils functions */
 
-int lbind_relindex(int idx, int onstack) {
+LB_API int lbind_relindex(int idx, int onstack) {
   return (idx > 0 || idx <= LUA_REGISTRYINDEX)
     ? idx
     : idx - onstack;
 }
 
-int lbind_argferror(lua_State *L, int idx, const char *fmt, ...) {
+LB_API int lbind_argferror(lua_State *L, int idx, const char *fmt, ...) {
     const char *errmsg;
     va_list argp;
     va_start(argp, fmt);
@@ -265,13 +265,13 @@ int lbind_argferror(lua_State *L, int idx, const char *fmt, ...) {
     return luaL_argerror(L, idx, errmsg);
 }
 
-int lbind_typeerror(lua_State *L, int idx, const char *tname) {
+LB_API int lbind_typeerror(lua_State *L, int idx, const char *tname) {
   const char *real_type = lbind_type(L, idx);
   return lbind_argferror(L, idx, "%s expected, got %s", tname,
       real_type != NULL ? real_type : luaL_typename(L, idx));
 }
 
-int lbind_matcherror(lua_State *L, const char *extramsg) {
+LB_API int lbind_matcherror(lua_State *L, const char *extramsg) {
   lua_Debug ar;
   lua_getinfo(L, "n", &ar);
   if (ar.name == NULL)
@@ -280,7 +280,7 @@ int lbind_matcherror(lua_State *L, const char *extramsg) {
       "candidates are:\n%s", ar.name, extramsg);
 }
 
-int lbind_copystack(lua_State *from, lua_State *to, int n) {
+LB_API int lbind_copystack(lua_State *from, lua_State *to, int n) {
     int i;
     luaL_checkstack(from, n, "too many args");
     for (i = 0; i < n; ++i)
@@ -289,7 +289,7 @@ int lbind_copystack(lua_State *from, lua_State *to, int n) {
     return n;
 }
 
-const char *lbind_dumpstack(lua_State *L, const char *msg) {
+LB_API const char *lbind_dumpstack(lua_State *L, const char *msg) {
   int i, top = lua_gettop(L);
   luaL_Buffer b;
   luaL_buffinit(L, &b);
@@ -308,7 +308,7 @@ const char *lbind_dumpstack(lua_State *L, const char *msg) {
   return lua_tostring(L, -1);
 }
 
-int lbind_hasfield(lua_State *L, int idx, const char *field) {
+LB_API int lbind_hasfield(lua_State *L, int idx, const char *field) {
   int hasfield;
   lua_getfield(L, idx, field);
   hasfield = !lua_isnil(L, -1);
@@ -327,7 +327,7 @@ static int Ltraceback(lua_State *L) {
     return 1;
 }
 
-int lbind_self(lua_State *L, const void *p, const char *method, int nargs, int *ptraceback) {
+LB_API int lbind_self(lua_State *L, const void *p, const char *method, int nargs, int *ptraceback) {
   luaL_checkstack(L, nargs+3, "too many arguments to self call");
   if (!lbind_retrieve(L, p)) return 0; /* 1 */
   lua_getfield(L, -1, method); /* 2 */
@@ -345,18 +345,19 @@ int lbind_self(lua_State *L, const void *p, const char *method, int nargs, int *
   return 1;
 }
 
-int lbind_pcall(lua_State *L, int nargs, int nrets) {
-  int res;
+LB_API int lbind_pcall(lua_State *L, int nargs, int nrets) {
+  int res, tb_idx;
   lua_pushcfunction(L, Ltraceback);
   lua_insert(L, -nargs-2);
-  res = lua_pcall(L, nargs, nrets, -nargs-2);
-  lua_remove(L, -nrets-1);
+  tb_idx = lua_gettop(L)-nargs-1;
+  res = lua_pcall(L, nargs, nrets, tb_idx);
+  lua_remove(L, tb_idx);
   return res;
 }
 
 /* metatable utils */
 
-int lbind_setmetatable(lua_State *L, const void *t) {
+LB_API int lbind_setmetatable(lua_State *L, const void *t) {
   if (lbind_getmetatable(L, t)) {
     lua_setmetatable(L, -2);
     return 1;
@@ -364,7 +365,7 @@ int lbind_setmetatable(lua_State *L, const void *t) {
   return 0;
 }
 
-int lbind_getmetatable(lua_State *L, const void *t) {
+LB_API int lbind_getmetatable(lua_State *L, const void *t) {
   lua_rawgetp(L, LUA_REGISTRYINDEX, t);
   if (lua_isnil(L, -1)) {
     lua_pop(L, 1);
@@ -373,7 +374,7 @@ int lbind_getmetatable(lua_State *L, const void *t) {
   return 1;
 }
 
-int lbind_setmetafield(lua_State *L, int idx, const char *field) {
+LB_API int lbind_setmetafield(lua_State *L, int idx, const char *field) {
   int newmt = 0;
   if (!lua_getmetatable(L, idx)) {
     lua_createtable(L, 0, 1);
@@ -399,7 +400,7 @@ static int Llibcall(lua_State *L) {
   return lua_gettop(L);
 }
 
-int lbind_setlibcall(lua_State *L, const char *method) {
+LB_API int lbind_setlibcall(lua_State *L, const char *method) {
   if (method == NULL) method = "new";
   lua_pushstring(L, method);
   lua_pushcclosure(L, Llibcall, 1);
@@ -524,7 +525,7 @@ static void push_newindexf(lua_State *L) {
   lua_pushcclosure(L, Lnewindex, 2);
 }
 
-void lbind_setindexf(lua_State *L, int ntables) {
+LB_API void lbind_setindexf(lua_State *L, int ntables) {
   push_indexf(L, ntables);
   lua_setfield(L, -2, "__index");
 }
@@ -565,15 +566,15 @@ static void set_cfuncupvalue(lua_State *L, lua_CFunction f, int field, int idx) 
   }
 }
 
-void lbind_sethashf(lua_State *L, lua_CFunction f, int field) {
+LB_API void lbind_sethashf(lua_State *L, lua_CFunction f, int field) {
   set_cfuncupvalue(L, f, field, 1);
 }
 
-void lbind_setarrayf(lua_State *L, lua_CFunction f, int field) {
+LB_API void lbind_setarrayf(lua_State *L, lua_CFunction f, int field) {
   set_cfuncupvalue(L, f, field, 2);
 }
 
-void lbind_setmaptable(lua_State *L, luaL_Reg libs[], int field) {
+LB_API void lbind_setmaptable(lua_State *L, luaL_Reg libs[], int field) {
   lua_newtable(L);
   luaL_setfuncs(L, libs, 0);
   if ((field & LBIND_INDEX) != 0) {
@@ -604,7 +605,7 @@ typedef union {
 
 #define check_size(L,n) (lua_rawlen((L),(n)) >= sizeof(lbind_Object))
 
-void *lbind_touserdata(lua_State *L, int idx) {
+LB_API void *lbind_touserdata(lua_State *L, int idx) {
 #ifndef LBIND_NO_PEER
   if (lua_istable(L, idx)) {
     lua_getfield(L, idx, "__peer");
@@ -646,18 +647,18 @@ static lbind_Object *testobj(lua_State *L, int idx) {
   return obj;
 }
 
-void *lbind_raw(lua_State *L, size_t objsize, int intern) {
+LB_API void *lbind_raw(lua_State *L, size_t objsize, int intern) {
   return newobj(L, objsize, intern ? LBIND_INTERN : 0)->o.instance;
 }
 
-void *lbind_new(lua_State *L, size_t objsize, const lbind_Type *t) {
+LB_API void *lbind_new(lua_State *L, size_t objsize, const lbind_Type *t) {
   lbind_Object *obj = newobj(L, objsize, t->flags);
   if (lbind_getmetatable(L, t))
     lua_setmetatable(L, -2);
   return obj->o.instance;
 }
 
-void *lbind_wrap(lua_State *L, void *p, const lbind_Type *t) {
+LB_API void *lbind_wrap(lua_State *L, void *p, const lbind_Type *t) {
   lbind_Object *obj = newobj(L, 0, t->flags);
   obj->o.instance = p;
   if ((obj->o.flags & LBIND_INTERN) != 0)
@@ -667,7 +668,7 @@ void *lbind_wrap(lua_State *L, void *p, const lbind_Type *t) {
   return p;
 }
 
-void *lbind_delete(lua_State *L, int idx) {
+LB_API void *lbind_delete(lua_State *L, int idx) {
   void *u = NULL;
   lbind_Object *obj = (lbind_Object*)lbind_touserdata(L, idx);
   if (obj != NULL) {
@@ -687,12 +688,12 @@ void *lbind_delete(lua_State *L, int idx) {
   return u;
 }
 
-void *lbind_object(lua_State *L, int idx) {
+LB_API void *lbind_object(lua_State *L, int idx) {
   lbind_Object *obj = testobj(L, idx);
   return obj == NULL ? NULL : obj->o.instance;
 }
 
-void lbind_intern(lua_State *L, const void *p) {
+LB_API void lbind_intern(lua_State *L, const void *p) {
   /* stack: object */
   get_internbox(L);
   lua_pushvalue(L, -2);
@@ -700,7 +701,7 @@ void lbind_intern(lua_State *L, const void *p) {
   lua_pop(L, 1);
 }
 
-int lbind_retrieve(lua_State *L, const void *p) {
+LB_API int lbind_retrieve(lua_State *L, const void *p) {
   get_internbox(L); /* 1 */
   lua_rawgetp(L, -1, p); /* 2 */
   if (lua_isnil(L, -1)) {
@@ -711,19 +712,19 @@ int lbind_retrieve(lua_State *L, const void *p) {
   return 1;
 }
 
-void lbind_track(lua_State *L, int idx) {
+LB_API void lbind_track(lua_State *L, int idx) {
   lbind_Object *obj = testobj(L, idx);
   if (obj != NULL)
     obj->o.flags |= LBIND_TRACK;
 }
 
-void lbind_untrack(lua_State *L, int idx) {
+LB_API void lbind_untrack(lua_State *L, int idx) {
   lbind_Object *obj = testobj(L, idx);
   if (obj != NULL)
     obj->o.flags &= ~LBIND_TRACK;
 }
 
-int lbind_hastrack(lua_State *L, int idx) {
+LB_API int lbind_hastrack(lua_State *L, int idx) {
   lbind_Object *obj = testobj(L, idx);
   return obj != NULL && (obj->o.flags & LBIND_TRACK) != 0;
 }
@@ -731,19 +732,19 @@ int lbind_hastrack(lua_State *L, int idx) {
 
 /* lbind type registry */
 
-void lbind_inittype(lbind_Type *t, const char *name) {
+LB_API void lbind_inittype(lbind_Type *t, const char *name) {
   t->name = name;
-  t->flags = LBIND_DEFFLAG;
+  t->flags = LBIND_DEFAULT_FLAG;
   t->cast = NULL;
   t->bases = NULL;
 }
 
-void lbind_setbase(lbind_Type *t, lbind_Type **bases, lbind_Cast *cast) {
+LB_API void lbind_setbase(lbind_Type *t, lbind_Type **bases, lbind_Cast *cast) {
   t->bases = bases;
   t->cast = cast;
 }
 
-int lbind_settrack(lbind_Type *t, int autotrack) {
+LB_API int lbind_settrack(lbind_Type *t, int autotrack) {
   int old_flag = t->flags&LBIND_TRACK ? 1 : 0;
   if (autotrack)
     t->flags |= LBIND_TRACK;
@@ -752,7 +753,7 @@ int lbind_settrack(lbind_Type *t, int autotrack) {
   return old_flag;
 }
 
-int lbind_setintern(lbind_Type *t, int autointern) {
+LB_API int lbind_setintern(lbind_Type *t, int autointern) {
   int old_flag = t->flags&LBIND_INTERN ? 1 : 0;
   if (autointern)
     t->flags |= LBIND_INTERN;
@@ -761,7 +762,7 @@ int lbind_setintern(lbind_Type *t, int autointern) {
   return old_flag;
 }
 
-lbind_Type *lbind_typeobject(lua_State *L, int idx) {
+LB_API lbind_Type *lbind_typeobject(lua_State *L, int idx) {
   lbind_Type *t = NULL;
   if (lua_getmetatable(L, idx)) {
     lua_getfield(L, -1, "__type");
@@ -833,7 +834,7 @@ static int type_exists(lua_State *L, const lbind_Type *t) {
   return 0;
 }
 
-int lbind_newmetatable(lua_State *L, luaL_Reg *libs, const lbind_Type *t) {
+LB_API int lbind_newmetatable(lua_State *L, luaL_Reg *libs, const lbind_Type *t) {
   if (type_exists(L, t)) return 0;
 
   lua_createtable(L, 0, 8);
@@ -899,7 +900,7 @@ static void set_meta_agency(lua_State *L, const char *key) {
   lua_pop(L, 1);
 }
 
-void lbind_setagency(lua_State *L) {
+LB_API void lbind_setagency(lua_State *L) {
   set_meta_agency(L, "len");
 #if LUA_VERSION_NUM >= 502
   set_meta_agency(L, "pairs");
@@ -910,7 +911,7 @@ void lbind_setagency(lua_State *L) {
 
 /* lbind type system */
 
-const char *lbind_tolstring(lua_State *L, int idx, size_t *plen) {
+LB_API const char *lbind_tolstring(lua_State *L, int idx, size_t *plen) {
   const char *tname = lbind_type(L, idx);
   lbind_Object *obj = testobj(L, idx);
   if (obj != NULL && tname)
@@ -927,7 +928,7 @@ const char *lbind_tolstring(lua_State *L, int idx, size_t *plen) {
   return lua_tolstring(L, -1, plen);
 }
 
-const char *lbind_type(lua_State *L, int idx) {
+LB_API const char *lbind_type(lua_State *L, int idx) {
   lbind_Type *t = lbind_typeobject(L, idx);
   if (t != NULL) return t->name;
   return NULL;
@@ -948,25 +949,25 @@ static int testtypemeta(lua_State *L, int idx, const lbind_Type *t) {
   return 0;
 }
 
-void *try_cast(lua_State *L, int idx, const lbind_Type *t) {
+LB_API void *try_cast(lua_State *L, int idx, const lbind_Type *t) {
   lbind_Type *from_type = lbind_typeobject(L, idx);
   if (from_type != NULL && from_type->cast != NULL)
       return from_type->cast(L, idx, t);
   return NULL;
 }
 
-int lbind_isa(lua_State *L, int idx, const lbind_Type *t) {
+LB_API int lbind_isa(lua_State *L, int idx, const lbind_Type *t) {
   return testtypemeta(L, idx, t) || try_cast(L, idx, t) != NULL;
 }
 
-void *lbind_cast(lua_State *L, int idx, const lbind_Type *t) {
+LB_API void *lbind_cast(lua_State *L, int idx, const lbind_Type *t) {
   lbind_Object *obj = (lbind_Object*)lbind_touserdata(L, idx);
   if (!check_size(L, idx) || obj == NULL || obj->o.instance == NULL)
     return NULL;
   return testtypemeta(L, idx, t) ? obj->o.instance : try_cast(L, idx, t);
 }
 
-int lbind_copy(lua_State *L, const void *obj, const lbind_Type *t) {
+LB_API int lbind_copy(lua_State *L, const void *obj, const lbind_Type *t) {
   if (!lbind_getmetatable(L, t)) /* 1 */
     return 0;
   lua_pushliteral(L, "new"); /* 2 */
@@ -986,7 +987,7 @@ int lbind_copy(lua_State *L, const void *obj, const lbind_Type *t) {
   return 1;
 }
 
-void *lbind_check(lua_State *L, int idx, const lbind_Type *t) {
+LB_API void *lbind_check(lua_State *L, int idx, const lbind_Type *t) {
   lbind_Object *obj = (lbind_Object*)lbind_touserdata(L, idx);
   void *u = NULL;
   if (!check_size(L, idx))
@@ -999,7 +1000,7 @@ void *lbind_check(lua_State *L, int idx, const lbind_Type *t) {
   return u;
 }
 
-void *lbind_test(lua_State *L, int idx, const lbind_Type *t) {
+LB_API void *lbind_test(lua_State *L, int idx, const lbind_Type *t) {
   lbind_Object *obj = (lbind_Object*)lbind_touserdata(L, idx);
   return testtypemeta(L, idx, t) ? obj->o.instance : try_cast(L, idx, t);
 }
@@ -1069,13 +1070,13 @@ static int nocase_strncmp(const char *a, const char *b, size_t len) {
   return *a != '\0' ? 1 : 0;
 }
 
-void lbind_initenum(lbind_Enum *et, const char *name) {
+LB_API void lbind_initenum(lbind_Enum *et, const char *name) {
   et->name = name;
   et->nitem = 0;
   et->items = NULL;
 }
 
-lbind_EnumItem *lbind_findenum(lbind_Enum *et, const char *s, size_t len) {
+LB_API lbind_EnumItem *lbind_findenum(lbind_Enum *et, const char *s, size_t len) {
   size_t b = 0, e = et->nitem-1;
   while (b < e) {
     size_t mid = (b + e) >> 1;
@@ -1113,7 +1114,7 @@ static int toenum(lua_State *L, int idx, lbind_Enum *et, int mask, int check) {
   return -1;
 }
 
-int lbind_pushmask(lua_State *L, int evalue, lbind_Enum *et) {
+LB_API int lbind_pushmask(lua_State *L, int evalue, lbind_Enum *et) {
   luaL_Buffer b;
   lbind_EnumItem *items;
   int first = 1;
@@ -1137,7 +1138,7 @@ int lbind_pushmask(lua_State *L, int evalue, lbind_Enum *et) {
   return 1;
 }
 
-int lbind_pushenum(lua_State *L, const char *name, lbind_Enum *et) {
+LB_API int lbind_pushenum(lua_State *L, const char *name, lbind_Enum *et) {
   lbind_EnumItem *item = lbind_findenum(et, name, -1);
   if (item == NULL)
     return -1;
@@ -1145,19 +1146,19 @@ int lbind_pushenum(lua_State *L, const char *name, lbind_Enum *et) {
   return item->value;
 }
 
-int lbind_testmask(lua_State *L, int idx, lbind_Enum *et) {
+LB_API int lbind_testmask(lua_State *L, int idx, lbind_Enum *et) {
   return toenum(L, idx, et, 1, 0);
 }
 
-int lbind_checkmask(lua_State *L, int idx, lbind_Enum *et) {
+LB_API int lbind_checkmask(lua_State *L, int idx, lbind_Enum *et) {
   return toenum(L, idx, et, 1, 1);
 }
 
-int lbind_testenum(lua_State *L, int idx, lbind_Enum *et) {
+LB_API int lbind_testenum(lua_State *L, int idx, lbind_Enum *et) {
   return toenum(L, idx, et, 0, 0);
 }
 
-int lbind_checkenum(lua_State *L, int idx, lbind_Enum *et) {
+LB_API int lbind_checkenum(lua_State *L, int idx, lbind_Enum *et) {
   return toenum(L, idx, et, 0, 1);
 }
 #endif /* LBIND_NO_ENUM */
@@ -1298,7 +1299,7 @@ static int Lcastto(lua_State *L) {
   return top - 1;
 }
 
-int luaopen_lbind(lua_State *L) {
+LUALIB_API int luaopen_lbind(lua_State *L) {
   luaL_Reg libs[] = {
 #define ENTRY(name) { #name, L##name }
     ENTRY(bases),

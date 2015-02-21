@@ -25,8 +25,9 @@ LUALIB_API void (luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup);
 #endif /* LUA_VERSION_NUM */
 
 
-#define LB_API      LUA_API
-#define LBLIB_API   LUALIB_API
+#ifndef LB_API
+# define LB_API      LUA_API
+#endif
 
 
 /* lbind internal max alignment */
@@ -145,11 +146,11 @@ struct lbind_Type {
 #define LBIND_TRACK     0x01
 #define LBIND_INTERN    0x02
 
-#ifndef LBIND_DEFFLAG
-# define LBIND_DEFFLAG   (LBIND_TRACK)
+#ifndef LBIND_DEFAULT_FLAG
+# define LBIND_DEFAULT_FLAG   (LBIND_TRACK)
 #endif
 
-#define LBIND_INIT(name) { name, LBIND_DEFFLAG, NULL, NULL }
+#define LBIND_INIT(name) { name, LBIND_DEFAULT_FLAG, NULL, NULL }
 #define LBIND_TYPE(var, name) LB_API lbind_Type var = LBIND_INIT(name)
 
 LB_API void lbind_inittype  (lbind_Type *t, const char *name);
