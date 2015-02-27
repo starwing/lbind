@@ -82,7 +82,7 @@ LB_API int lbind_setlibcall   (lua_State *L, const char *method);
 #define LBIND_INDEX     0x01
 #define LBIND_NEWINDEX  0x02
 
-LB_API void lbind_setindexf    (lua_State *L, int ntables);
+LB_API void lbind_setaccessors (lua_State *L, int ntables, int field);
 LB_API void lbind_setarrayf    (lua_State *L, lua_CFunction f, int field);
 LB_API void lbind_sethashf     (lua_State *L, lua_CFunction f, int field);
 LB_API void lbind_setmaptable  (lua_State *L, luaL_Reg libs[], int field);
@@ -142,9 +142,15 @@ struct lbind_Type {
  *
  * When a object is interned, You can use it's pointer to find the
  * object itself.
+ *
+ * if a type has flags LBIND_ACCESSOR, it has a non-trival __index and
+ * __newindex, that means the object of this type has the ability to
+ * save any value into it's uservalue and can have custom accessors.
+ * if a type has base type, it also have LBIND_ACCESSOR flag.
  */
 #define LBIND_TRACK     0x01
 #define LBIND_INTERN    0x02
+#define LBIND_ACCESSOR  0x04
 
 #ifndef LBIND_DEFAULT_FLAG
 # define LBIND_DEFAULT_FLAG   (LBIND_TRACK)
