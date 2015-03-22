@@ -24,6 +24,13 @@ LUALIB_API const char *(luaL_tolstring) (lua_State *L, int idx, size_t *len);
 LUALIB_API void (luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup);
 #endif /* LUA_VERSION_NUM */
 
+#ifdef __cplusplus
+# define LB_NS_BEGIN extern "C" {
+# define LB_NS_END   }
+#else
+# define LB_NS_BEGIN
+# define LB_NS_END
+#endif
 
 #if !defined(LB_API) && defined(_WIN32)
 # ifdef LBIND_IMPLEMENTATION
@@ -33,18 +40,26 @@ LUALIB_API void (luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup);
 # endif
 #endif
 
+#ifndef LB_API
+# define LB_API extern
+#endif
+
+#define LBLIB_API LB_API
 
 /* lbind internal max alignment */
 #ifndef LBIND_MAXALIGN
 # define LBIND_MAXALIGN union { double u; void *s; long l; }
 #endif
 
+LB_NS_BEGIN
+
+
 typedef LBIND_MAXALIGN lbind_MaxAlign;
 
 
 /* lbind runtime */
 #ifndef LBIND_NO_RUNTIME
-LUALIB_API int luaopen_lbind (lua_State *L);
+LBLIB_API int luaopen_lbind (lua_State *L);
 #endif /* LBIND_NO_RUNTIME */
 
 
@@ -260,12 +275,16 @@ LB_API int lbind_checkmask (lua_State *L, int idx, lbind_Enum *et);
 #endif /* LBIND_NO_ENUM */
 
 
+LB_NS_BEGIN
+
 #endif /* LBIND_H */
 
 #ifdef LBIND_IMPLEMENTATION
 
 
 #include <string.h>
+
+LB_NS_BEGIN
 
 
 /* lua 5.3 compatible accessor functions */
@@ -290,12 +309,8 @@ static int lua53_rawgetp(lua_State *L, int idx, const void *p)
 
 static void lua53_rotate(lua_State *L, int idx, int n) {
   int i;
-  if (n < 0) {
-    if (idx < 0)
-      n -= idx;
-    else
-      n += lua_gettop(L)-idx-1;
-  }
+  if (n < 0)
+    n += (idx < 0) ? -idx : (lua_gettop(L)-idx-1);
   for (i = 0; i < n; ++i)
     lua_insert(L, -idx);
 }
@@ -795,7 +810,8 @@ static int Lindex(lua_State *L) {
 static void push_indexf(lua_State *L, int ntables) {
   lua_pushnil(L);
   lua_pushnil(L);
-  lua53_rotate(L, ntables+2, 2);
+  if (ntables != 0)
+    lua53_rotate(L, -ntables-2, 2);
   lua_pushcclosure(L, Lindex, ntables+2);
 }
 
@@ -1592,7 +1608,7 @@ static int Lcastto(lua_State *L) {
   return top - 1;
 }
 
-LUALIB_API int luaopen_lbind(lua_State *L) {
+LBLIB_API int luaopen_lbind(lua_State *L) {
   luaL_Reg libs[] = {
 #define ENTRY(name) { #name, L##name }
     ENTRY(bases),
@@ -1616,6 +1632,9 @@ LUALIB_API int luaopen_lbind(lua_State *L) {
   return 1;
 }
 #endif /* LBIND_NO_RUNTIME */
+
+
+LB_NS_END
 
 #endif /* LBIND_IMPLEMENTATION */
 /* vim: set sw=2: */
