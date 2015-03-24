@@ -7,15 +7,15 @@
 
 
 #if LUA_VERSION_NUM < 502
-#  define LUA_OK                        0
-#  define lua_getuservalue              lua_getfenv
-#  define lua_setuservalue              lua_setfenv
-#  define lua_rawlen                    lua_objlen
+# define LUA_OK                        0
+# define lua_getuservalue              lua_getfenv
+# define lua_setuservalue              lua_setfenv
+# define lua_rawlen                    lua_objlen
 
-#  define luaL_newlibtable(L,l)	\
-    lua_createtable(L, 0, sizeof(l)/sizeof((l)[0]) - 1)
-#  define luaL_newlib(L,l) \
-    (luaL_newlibtable(L,l), luaL_setfuncs(L,l,0))
+# define luaL_newlibtable(L,l)	\
+   lua_createtable(L, 0, sizeof(l)/sizeof((l)[0]) - 1)
+# define luaL_newlib(L,l) \
+   (luaL_newlibtable(L,l), luaL_setfuncs(L,l,0))
 
 LUA_API lua_Integer (lua_tointegerx) (lua_State *L, int idx, int *valid);
 LUA_API void (lua_rawsetp) (lua_State *L, int idx, const void *p);
@@ -34,9 +34,9 @@ LUALIB_API void (luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup);
 
 #if !defined(LB_API) && defined(_WIN32)
 # ifdef LBIND_IMPLEMENTATION
-#  define LB_API __declspec(dllexport)
+#   define LB_API __declspec(dllexport)
 # else
-#  define LB_API __declspec(dllimport)
+#   define LB_API __declspec(dllimport)
 # endif
 #endif
 
@@ -44,7 +44,11 @@ LUALIB_API void (luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup);
 # define LB_API extern
 #endif
 
-#define LBLIB_API LB_API
+#if defined(_WIN32)
+# define LBLIB_API __declspec(dllexport)
+#else
+# define LBLIB_API extern
+#endif
 
 /* lbind internal max alignment */
 #ifndef LBIND_MAXALIGN
@@ -129,7 +133,7 @@ LB_API void lbind_setlightuservalue (lua_State *L, const void *p);
  * the real userdata, in this case, lbind use this table as it is
  * t.__peer. i.e. lbind treat that table as a native object.
  */
-LB_API void *lbind_getuserdata (lua_State *L, int idx);
+LB_API void *lbind_touserdata (lua_State *L, int idx);
 
 
 /* lbind class runtime */
