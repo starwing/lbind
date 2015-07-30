@@ -872,6 +872,7 @@ LB_API void lbind_setaccessors(lua_State *L, int ntables, int field) {
   if ((field & LBIND_NEWINDEX) != 0) {
     lua_pushnil(L);
     lua_pushnil(L);
+    lua_pushcclosure(L, lbL_newindex, 2);
     lua_setfield(L, -2, "__newindex");
   }
 }
@@ -1393,7 +1394,7 @@ static int lbE_stricmp(const char *a, const char *b, size_t len) {
 static int lbE_toenum(lua_State *L, int idx, lbind_Enum *et, int mask, int check) {
   int type = lua_type(L, idx);
   if (type == LUA_TNUMBER)
-    return lua_tointeger(L, idx);
+    return (int)lua_tointeger(L, idx);
   else if (type == LUA_TSTRING) {
     size_t len;
     const char *s = lua_tolstring(L, idx, &len);
