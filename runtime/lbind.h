@@ -279,7 +279,7 @@ LB_API int lbind_checkmask (lua_State *L, int idx, lbind_Enum *et);
 #endif /* LBIND_NO_ENUM */
 
 
-LB_NS_BEGIN
+LB_NS_END
 
 #endif /* LBIND_H */
 
