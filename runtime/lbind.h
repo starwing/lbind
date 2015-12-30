@@ -32,6 +32,17 @@ LUALIB_API void (luaL_setfuncs) (lua_State *L, const luaL_Reg *l, int nup);
 # define LB_NS_END
 #endif
 
+#ifdef LBIND_STATIC_API
+# ifndef LBIND_IMPLEMENTATION
+#  define LBIND_IMPLEMENTATION
+# endif
+# if __GNUC__
+#   define LB_API static __attribute((unused))
+# else
+#   define LB_API static
+# endif
+#endif
+
 #if !defined(LB_API) && defined(_WIN32)
 # ifdef LBIND_IMPLEMENTATION
 #   define LB_API __declspec(dllexport)
@@ -340,7 +351,7 @@ LUA_API void lua_rawsetp(lua_State *L, int idx, const void *p) {
   lua_rawset(L, lbind_relindex(idx, 1));
 }
 
-LUALIB_API void luaL_setfuncs(lua_State *L, luaL_Reg *l, int nup) {
+LUALIB_API void luaL_setfuncs(lua_State *L, const luaL_Reg *l, int nup) {
   luaL_checkstack(L, nup, "too many upvalues");
   for (; l->name != NULL; l++) {  /* fill the table with given functions */
     int i;
@@ -562,14 +573,14 @@ LB_API void lbind_requireinto(lua_State *L, const char *prefix, lbind_Reg *libs)
 /* lbind utils functions */
 
 static int lbL_traceback(lua_State *L) {
-    const char *msg = lua_tostring(L, 1);
-    if (msg)
-        luaL_traceback(L, L, msg, 1);
-    else if (!lua_isnoneornil(L, 1)) {  /* is there an error object? */
-        if (!luaL_callmeta(L, 1, "__tostring"))  /* try its 'tostring' metamethod */
-            lua_pushliteral(L, "(no error message)");
-    }
-    return 1;
+  const char *msg = lua_tostring(L, 1);
+  if (msg)
+    luaL_traceback(L, L, msg, 1);
+  else if (!lua_isnoneornil(L, 1)) {  /* is there an error object? */
+    if (!luaL_callmeta(L, 1, "__tostring"))  /* try its 'tostring' metamethod */
+      lua_pushliteral(L, "(no error message)");
+  }
+  return 1;
 }
 
 LB_API int lbind_relindex(int idx, int onstack) {
